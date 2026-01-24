@@ -1,25 +1,37 @@
 :root {
-  /* Colors */
-  --color-primary: #1B5E20;      /* Deep Pharmacy Green */
-  --color-primary-light: #4c8c4a;
-  --color-secondary: #FFF8E1;    /* Soft Cream */
-  --color-text: #333333;         /* Dark Grey */
-  --color-text-light: #666666;
-  --color-white: #FFFFFF;
-  --color-bg-light: #F9FAFB;
-  --color-error: #D32F2F;
-  --color-success: #388E3C;
-  --color-shadow: rgba(0, 0, 0, 0.1);
+  /* Premium 2026 Palette */
+  --color-primary: #022c22;      /* Deep Vogue Green */
+  --color-primary-light: #064e3b;
+  --color-accent: #b45309;       /* Metallic Gold/Bronze */
+  --color-accent-light: #d97706;
+  
+  --color-text: #1f2937;         /* Soft Black */
+  --color-text-light: #4b5563;   /* Muted Grey */
+  --color-white: #ffffff;
+  --color-bg-light: #fafaf9;     /* Warm Off-White (Stone-50) */
+  --color-bg-subtle: #f3f4f6;    /* Cool Grey-100 */
 
-  /* Spacing */
-  --container-width: 1200px;
-  --spacing-sm: 8px;
-  --spacing-md: 16px;
-  --spacing-lg: 24px;
-  --spacing-xl: 48px;
+  /* Visual Effects */
+  --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+  --shadow-xl: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04);
+  --shadow-glow: 0 0 15px rgba(180, 83, 9, 0.3); /* Gold glow */
+
+  --glass-bg: rgba(255, 255, 255, 0.7);
+  --glass-border: 1px solid rgba(255, 255, 255, 0.5);
+  --glass-blur: blur(12px);
+
+  /* Spacing & Layout */
+  --container-width: 1280px; /* Wider for modern screens */
+  --spacing-sm: 12px;
+  --spacing-md: 24px;
+  --spacing-lg: 48px;
+  --spacing-xl: 96px;
 
   /* Typography */
-  --font-main: 'Inter', sans-serif;
+  --font-heading: 'Plus Jakarta Sans', sans-serif;
+  --font-body: 'Inter', sans-serif;
 }
 
 * {
@@ -29,16 +41,25 @@
 }
 
 body {
-  font-family: var(--font-main);
-  background-color: var(--color-white);
+  font-family: var(--font-body);
+  background-color: var(--color-bg-light);
   color: var(--color-text);
-  line-height: 1.5;
+  line-height: 1.6;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1, h2, h3, h4, h5, h6 {
+  font-family: var(--font-heading);
+  color: var(--color-primary);
+  line-height: 1.2;
+  letter-spacing: -0.02em;
 }
 
 a {
   text-decoration: none;
   color: inherit;
+  transition: all 0.2s ease;
 }
 
 ul {
@@ -61,31 +82,85 @@ img {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  padding: 12px 24px;
-  border-radius: 9999px; /* Rounded pill buttons */
-  font-weight: 600;
+  padding: 16px 32px;
+  border-radius: 9999px;
+  font-family: var(--font-heading);
+  font-weight: 700;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: none;
+  font-size: 1rem;
+  letter-spacing: 0.01em;
 }
 
 .btn-primary {
-  background-color: var(--color-primary);
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
   color: var(--color-white);
+  box-shadow: var(--shadow-md);
 }
 
 .btn-primary:hover {
-  background-color: var(--color-primary-light);
-  transform: translateY(-1px);
-  box-shadow: 0 4px 6px var(--color-shadow);
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lg), var(--shadow-glow);
 }
 
 .btn-secondary {
-  background-color: var(--color-secondary);
+  background: var(--color-white);
   color: var(--color-primary);
-  border: 1px solid var(--color-primary);
+  border: 1px solid rgba(2, 44, 34, 0.1); /* Subtle green border */
+  box-shadow: var(--shadow-sm);
 }
 
 .btn-secondary:hover {
-  background-color: var(--color-white);
+  background: var(--color-bg-subtle);
+  border-color: var(--color-primary);
+  transform: translateY(-1px);
+}
+
+.text-center { text-align: center; }
+.bg-light { background-color: var(--color-bg-subtle); }
+.section { padding: var(--spacing-xl) 0; }
+
+.section-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  margin-bottom: var(--spacing-lg);
+  color: var(--color-primary);
+}
+
+/* Glassmorphism Utility */
+.glass-panel {
+  background: var(--glass-bg);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+  width: 10px;
+}
+::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 5px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+@media (max-width: 768px) {
+  :root {
+    --spacing-xl: 64px;
+  }
+  .section-title {
+    font-size: 2rem;
+  }
+  .btn {
+    padding: 14px 24px;
+    width: 100%; /* Full width buttons on mobile usually look better */
+    max-width: 320px;
+  }
 }

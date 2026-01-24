@@ -1,10 +1,14 @@
 .navbar {
-    background: var(--color-white);
-    box-shadow: 0 2px 4px var(--color-shadow);
-    padding: var(--spacing-md) 0;
+    background: rgba(255, 255, 255, 0.85);
+    /* Semi-transparent */
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
+    border-bottom: 1px solid rgba(0, 0, 0, 0.05);
+    padding: var(--spacing-sm) 0;
     position: sticky;
     top: 0;
     z-index: 1000;
+    transition: all 0.3s ease;
 }
 
 .navbar-container {
@@ -14,26 +18,36 @@
 }
 
 .navbar-logo {
+    font-family: var(--font-heading);
     font-size: 1.5rem;
-    font-weight: 700;
+    font-weight: 800;
     color: var(--color-primary);
-    text-decoration: none;
+    letter-spacing: -0.03em;
+    text-transform: uppercase;
 }
 
 .navbar-links {
     display: flex;
-    gap: var(--spacing-lg);
+    gap: var(--spacing-md);
+    align-items: center;
 }
 
 .navbar-links a {
-    font-weight: 500;
-    color: var(--color-text);
-    transition: color 0.2s;
-    text-decoration: none;
+    font-family: var(--font-body);
+    font-weight: 600;
+    font-size: 0.95rem;
+    color: var(--color-text-light);
+    padding: 8px 12px;
+    border-radius: 8px;
+    transition: all 0.2s ease;
 }
 
-.navbar-links a:hover {
+.navbar-links a:hover,
+.navbar-links a.active {
     color: var(--color-primary);
+    background: rgba(2, 44, 34, 0.05);
+    /* Very subtle green tint */
+    transform: translateY(-1px);
 }
 
 .navbar-toggle {
@@ -41,12 +55,13 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: var(--color-text);
+    color: var(--color-primary);
 }
 
 @media (max-width: 968px) {
     .navbar-toggle {
         display: block;
+        padding: 8px;
     }
 
     .navbar-links {
@@ -54,15 +69,30 @@
         top: 100%;
         left: 0;
         right: 0;
-        background: var(--color-white);
+        background: rgba(255, 255, 255, 0.98);
+        backdrop-filter: blur(20px);
         flex-direction: column;
-        padding: var(--spacing-md);
+        padding: var(--spacing-lg);
         gap: var(--spacing-md);
-        box-shadow: 0 4px 6px var(--color-shadow);
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.1);
         display: none;
+        border-bottom: 1px solid rgba(0, 0, 0, 0.05);
     }
 
     .navbar-links.active {
         display: flex;
+        animation: fadeIn 0.2s ease forwards;
+    }
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
     }
 }

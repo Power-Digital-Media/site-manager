@@ -1,7 +1,10 @@
 .hero {
-    background: linear-gradient(135deg, var(--color-bg-light) 0%, #e8f5e9 100%);
+    /* Rich, subtle gradient background */
+    background: radial-gradient(circle at 80% 20%, rgba(255, 248, 225, 0.5) 0%, transparent 40%),
+        radial-gradient(circle at 20% 80%, rgba(220, 252, 231, 0.5) 0%, transparent 40%),
+        var(--color-bg-light);
     padding: var(--spacing-xl) 0;
-    min-height: 500px;
+    min-height: 600px;
     display: flex;
     align-items: center;
     position: relative;
@@ -17,22 +20,29 @@
 
 .hero-content {
     flex: 1;
-    max-width: 600px;
+    max-width: 650px;
+    z-index: 2;
+    /* Text above decorations */
 }
 
 .hero-title {
-    font-size: 3rem;
-    line-height: 1.2;
+    font-size: 3.5rem;
+    line-height: 1.1;
     color: var(--color-primary);
     margin-bottom: var(--spacing-md);
-    font-weight: 700;
+    letter-spacing: -0.03em;
+    background: linear-gradient(to right, var(--color-primary) 0%, #065f46 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
 }
 
 .hero-subtitle {
     font-size: 1.25rem;
     color: var(--color-text-light);
     margin-bottom: var(--spacing-lg);
-    line-height: 1.6;
+    line-height: 1.7;
+    max-width: 500px;
 }
 
 .hero-actions {
@@ -42,27 +52,21 @@
     flex-wrap: wrap;
 }
 
-.hero-call-mobile {
-    margin-bottom: var(--spacing-md);
-    display: none;
-    /* Show on mobile only usually, but user wanted it visible */
-}
-
-.call-link {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    font-weight: 600;
-    color: var(--color-primary);
-}
-
+/* Updated Badge Design */
 .hero-badges {
     display: flex;
     gap: var(--spacing-md);
     font-size: 0.9rem;
-    color: var(--color-text-light);
-    font-weight: 500;
+    color: var(--color-primary);
+    font-weight: 600;
     flex-wrap: wrap;
+    background: rgba(255, 255, 255, 0.6);
+    padding: 12px 24px;
+    border-radius: 999px;
+    border: 1px solid rgba(255, 255, 255, 1);
+    backdrop-filter: blur(4px);
+    display: inline-flex;
+    /* Shrink to fit */
 }
 
 .hero-visual {
@@ -70,35 +74,53 @@
     display: flex;
     justify-content: center;
     align-items: center;
+    position: relative;
+}
+
+/* Optional: Add a subtle glow behind the bottle */
+.hero-visual::before {
+    content: '';
+    position: absolute;
+    width: 300px;
+    height: 300px;
+    background: radial-gradient(circle, rgba(180, 83, 9, 0.15) 0%, transparent 70%);
+    border-radius: 50%;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 1;
 }
 
 @media (max-width: 768px) {
-    .hero-container {
-        flex-direction: column-reverse;
-        /* Visual on top? Or bottom? usually bottom for mobile so text is first */
-        flex-direction: column;
+    .hero {
+        padding-top: var(--spacing-md);
         text-align: center;
     }
 
+    .hero-container {
+        flex-direction: column;
+        gap: var(--spacing-lg);
+    }
+
     .hero-title {
-        font-size: 2.25rem;
+        font-size: 2.5rem;
+    }
+
+    .hero-subtitle {
+        margin: 0 auto var(--spacing-lg);
     }
 
     .hero-actions {
         justify-content: center;
+        width: 100%;
     }
 
     .hero-badges {
         justify-content: center;
-        font-size: 0.8rem;
+        width: 100%;
     }
 
     .hero-visual {
-        margin-top: var(--spacing-lg);
-    }
-
-    /* Show call link prominently on mobile */
-    .hero-call-mobile {
-        display: block;
+        margin-top: 0;
     }
 }

@@ -1,9 +1,9 @@
 .footer {
-    background-color: var(--color-primary);
-    color: var(--color-white);
+    background-color: #011E17;
+    /* Even darker green for footer contrast */
+    color: rgba(255, 255, 255, 0.9);
     padding-top: var(--spacing-xl);
     margin-top: auto;
-    /* Push to bottom if content is short */
 }
 
 .footer-grid {
@@ -11,65 +11,82 @@
     grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
     gap: var(--spacing-xl);
     padding-bottom: var(--spacing-xl);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .footer-logo {
-    font-size: 1.5rem;
-    font-weight: 700;
+    font-family: var(--font-heading);
+    font-size: 1.75rem;
+    font-weight: 800;
     margin-bottom: var(--spacing-sm);
-    color: var(--color-secondary);
+    color: var(--color-white);
+    letter-spacing: -0.02em;
 }
 
 .footer-tagline {
-    opacity: 0.9;
+    opacity: 0.7;
     margin-bottom: var(--spacing-md);
-    line-height: 1.6;
+    line-height: 1.7;
+    max-width: 250px;
 }
 
 .footer-nav h4,
 .footer-contact h4 {
-    font-size: 1.2rem;
-    font-weight: 600;
+    font-size: 1.1rem;
+    font-weight: 700;
     margin-bottom: var(--spacing-md);
-    color: var(--color-secondary);
+    color: var(--color-accent);
+    /* Gold accent for headings */
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    font-size: 0.85rem;
 }
 
 .footer-nav ul {
     display: flex;
     flex-direction: column;
-    gap: 8px;
+    gap: 12px;
 }
 
 .footer-nav a {
-    opacity: 0.9;
-    transition: opacity 0.2s;
+    opacity: 0.7;
+    transition: all 0.2s ease;
+    font-weight: 500;
 }
 
 .footer-nav a:hover {
     opacity: 1;
-    text-decoration: underline;
+    color: var(--color-white);
+    padding-left: 4px;
+    /* Slight movement */
 }
 
 .contact-item {
     display: flex;
     align-items: flex-start;
-    gap: 10px;
-    margin-bottom: 12px;
-    opacity: 0.9;
+    gap: 12px;
+    margin-bottom: 16px;
+    opacity: 0.8;
     color: var(--color-white);
     text-decoration: none;
+    font-size: 0.95rem;
+}
+
+.contact-item svg {
+    color: var(--color-accent);
+    /* Gold icons */
 }
 
 .footer-bottom {
-    background-color: rgba(0, 0, 0, 0.1);
     padding: var(--spacing-md) 0;
     font-size: 0.9rem;
-    opacity: 0.8;
+    opacity: 0.6;
 }
 
 @media (max-width: 768px) {
     .footer-grid {
         text-align: center;
+        gap: var(--spacing-lg);
     }
 
     .contact-item {
