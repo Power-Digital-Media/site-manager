@@ -270,7 +270,7 @@ img {
   width: auto;
   border-radius: 6px;
   object-fit: contain;
-  filter: invert(1);
+  filter: brightness(0) invert(1) brightness(2);
 }
 
 .nav__logo-icon {
@@ -1444,7 +1444,7 @@ img {
   width: auto;
   border-radius: 8px;
   object-fit: contain;
-  filter: invert(1);
+  filter: brightness(0) invert(1) brightness(2);
 }
 
 .footer__tagline {
@@ -1622,7 +1622,21 @@ img {
     display: none;
   }
   
+  .youth .youth__content {
+    text-align: center;
+    align-items: center;
+  }
+
+  .youth .section-header__eyebrow {
+    align-self: center;
+  }
+  
+  .youth .btn {
+    align-self: center;
+  }
+
   .youth__stats {
+    justify-content: center;
     flex-wrap: wrap;
     gap: var(--s-xl);
   }
