@@ -1,14 +1,15 @@
 {
-  "name": "church-244",
+  "name": "pdm-site-manager",
   "private": true,
   "version": "1.0.0",
-  "description": "Church 244 — Richland, MS",
+  "description": "Power Digital Media — Site Manager",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
     "preview": "vite preview"
   },
   "devDependencies": {
-    "vite": "^6.3.1"
+    "vite": "^6.3.1",
+    "vite-plugin-pwa": "^1.2.0"
   }
 }

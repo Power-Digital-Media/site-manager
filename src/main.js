@@ -1,181 +1,200 @@
-/* ═══════════════════════════════════════════════════════════════
-   CHURCH 244 — Main JavaScript
-   Scroll animations, navigation, particles, counters
-   ═══════════════════════════════════════════════════════════════ */
+/**
+ * Power Digital Media — Site Manager
+ * Main Application Entry Point
+ */
 
 import './style.css';
+import { Store } from './store.js';
+import { renderSidebar } from './components/sidebar.js';
+import { renderHeader } from './components/header.js';
+import { renderLogin } from './pages/login.js';
+import { renderDashboard } from './pages/dashboard.js';
+import { renderPagesEditor, initPagesEditor } from './pages/pages-editor.js';
+import { renderEvents, initEvents } from './pages/events.js';
+import { renderAnnouncements, initAnnouncements } from './pages/announcements.js';
+import { renderTeam, initTeam } from './pages/team.js';
+import { renderSettings, initSettings } from './pages/settings.js';
+import { showToast } from './components/toast.js';
 
-// ── DOM Ready ─────────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => {
-  initNavigation();
-  initScrollReveal();
-  initParticles();
-  initCountUp();
-  initSmoothScroll();
-});
+let isLoggedIn = false;
 
-// ═══════════════════════════════════════════════════════════════
-// NAVIGATION
-// ═══════════════════════════════════════════════════════════════
-function initNavigation() {
-  const nav = document.getElementById('navbar');
-  const hamburger = document.getElementById('hamburger');
-  const navLinks = document.getElementById('navLinks');
-  
-  // Scroll effect
-  const handleScroll = () => {
-    if (window.scrollY > 50) {
-      nav.classList.add('scrolled');
-    } else {
-      nav.classList.remove('scrolled');
-    }
-  };
-  
-  window.addEventListener('scroll', handleScroll, { passive: true });
-  handleScroll();
-  
-  // Hamburger toggle
-  hamburger.addEventListener('click', () => {
-    hamburger.classList.toggle('active');
-    navLinks.classList.toggle('open');
-    document.body.style.overflow = navLinks.classList.contains('open') ? 'hidden' : '';
-  });
-  
-  // Close mobile nav on link click
-  navLinks.querySelectorAll('.nav__link').forEach(link => {
-    link.addEventListener('click', () => {
-      hamburger.classList.remove('active');
-      navLinks.classList.remove('open');
-      document.body.style.overflow = '';
-    });
-  });
+const PAGE_TITLES = {
+  dashboard: 'Dashboard',
+  pages: 'Page Content',
+  events: 'Events',
+  announcements: 'Announcements',
+  team: 'Team Members',
+  settings: 'Settings',
+};
+
+function getCurrentPage() {
+  const hash = window.location.hash.replace('#/', '') || 'dashboard';
+  return PAGE_TITLES[hash] ? hash : 'dashboard';
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SCROLL REVEAL
-// ═══════════════════════════════════════════════════════════════
-function initScrollReveal() {
-  const reveals = document.querySelectorAll('.reveal');
+function renderApp() {
+  const app = document.getElementById('app');
   
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach((entry, index) => {
-        if (entry.isIntersecting) {
-          // Stagger the reveal animations
-          const delay = entry.target.dataset.delay || 0;
-          setTimeout(() => {
-            entry.target.classList.add('revealed');
-          }, delay);
-          observer.unobserve(entry.target);
-        }
-      });
-    },
-    {
-      threshold: 0.1,
-      rootMargin: '0px 0px -50px 0px',
-    }
-  );
-  
-  // Add stagger delays to grouped elements
-  const groups = document.querySelectorAll('.about__grid, .services__grid, .community__grid');
-  groups.forEach(group => {
-    const items = group.querySelectorAll('.reveal');
-    items.forEach((item, i) => {
-      item.dataset.delay = i * 100;
-    });
-  });
-  
-  reveals.forEach(el => observer.observe(el));
+  if (!isLoggedIn) {
+    app.className = 'app app--login';
+    app.innerHTML = renderLogin();
+    initLoginPage();
+    return;
+  }
+
+  const page = getCurrentPage();
+  const pageTitle = PAGE_TITLES[page];
+
+  app.className = 'app app--dashboard';
+  app.innerHTML = `
+    ${renderSidebar(page)}
+    <div class="main-wrapper">
+      ${renderHeader(pageTitle)}
+      <main class="main-content" id="mainContent">
+        <div class="main-content__inner">
+          ${getPageContent(page)}
+        </div>
+      </main>
+    </div>
+  `;
+
+  initPageInteractions(page);
+  initGlobalInteractions();
 }
 
-// ═══════════════════════════════════════════════════════════════
-// PARTICLES
-// ═══════════════════════════════════════════════════════════════
-function initParticles() {
-  const container = document.getElementById('heroParticles');
-  if (!container) return;
-  
-  const particleCount = 30;
-  
-  for (let i = 0; i < particleCount; i++) {
-    const particle = document.createElement('div');
-    particle.className = 'hero__particle';
-    
-    particle.style.left = `${Math.random() * 100}%`;
-    particle.style.animationDuration = `${6 + Math.random() * 8}s`;
-    particle.style.animationDelay = `${Math.random() * 8}s`;
-    particle.style.width = `${1 + Math.random() * 3}px`;
-    particle.style.height = particle.style.width;
-    particle.style.opacity = 0;
-    
-    // Vary colors between gold and white
-    const colors = ['#d4a853', '#e8c97a', '#ffffff', '#d4a853'];
-    particle.style.background = colors[Math.floor(Math.random() * colors.length)];
-    
-    container.appendChild(particle);
+function getPageContent(page) {
+  switch (page) {
+    case 'dashboard': return renderDashboard();
+    case 'pages': return renderPagesEditor();
+    case 'events': return renderEvents();
+    case 'announcements': return renderAnnouncements();
+    case 'team': return renderTeam();
+    case 'settings': return renderSettings();
+    default: return renderDashboard();
   }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// COUNT UP ANIMATION
-// ═══════════════════════════════════════════════════════════════
-function initCountUp() {
-  const counters = document.querySelectorAll('[data-count]');
-  
-  const observer = new IntersectionObserver(
-    (entries) => {
-      entries.forEach(entry => {
-        if (entry.isIntersecting) {
-          const el = entry.target;
-          const target = parseInt(el.dataset.count);
-          const duration = 2000;
-          const start = performance.now();
-          
-          const animate = (now) => {
-            const elapsed = now - start;
-            const progress = Math.min(elapsed / duration, 1);
-            
-            // Ease out cubic
-            const eased = 1 - Math.pow(1 - progress, 3);
-            const current = Math.floor(eased * target);
-            
-            el.textContent = current.toLocaleString();
-            
-            if (progress < 1) {
-              requestAnimationFrame(animate);
-            } else {
-              el.textContent = target.toLocaleString();
-            }
-          };
-          
-          requestAnimationFrame(animate);
-          observer.unobserve(el);
-        }
-      });
-    },
-    { threshold: 0.5 }
-  );
-  
-  counters.forEach(el => observer.observe(el));
+function initPageInteractions(page) {
+  const rerender = () => renderApp();
+
+  switch (page) {
+    case 'pages': initPagesEditor(); break;
+    case 'events': initEvents(rerender); break;
+    case 'announcements': initAnnouncements(rerender); break;
+    case 'team': initTeam(rerender); break;
+    case 'settings': initSettings(rerender); break;
+  }
 }
 
-// ═══════════════════════════════════════════════════════════════
-// SMOOTH SCROLL
-// ═══════════════════════════════════════════════════════════════
-function initSmoothScroll() {
-  document.querySelectorAll('a[href^="#"]').forEach(anchor => {
-    anchor.addEventListener('click', function (e) {
-      e.preventDefault();
-      const target = document.querySelector(this.getAttribute('href'));
-      if (target) {
-        const offset = 80;
-        const top = target.getBoundingClientRect().top + window.pageYOffset - offset;
-        
-        window.scrollTo({
-          top,
-          behavior: 'smooth',
-        });
-      }
+function initGlobalInteractions() {
+  // Publish button
+  const publishBtn = document.getElementById('publishBtn');
+  if (publishBtn) {
+    publishBtn.addEventListener('click', () => {
+      publishBtn.classList.add('sidebar__publish-btn--loading');
+      publishBtn.innerHTML = `
+        <div class="spinner"></div>
+        Publishing...
+      `;
+      setTimeout(() => {
+        Store.publish();
+        showToast('Changes published successfully! 🚀', 'success');
+        publishBtn.classList.remove('sidebar__publish-btn--loading');
+        publishBtn.innerHTML = `
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 2L11 13"/><path d="M22 2L15 22L11 13L2 9L22 2Z"/></svg>
+          Publish Changes
+        `;
+        // Update last published in header
+        const lastPub = document.querySelector('.header__last-published');
+        if (lastPub) lastPub.textContent = 'Last published just now';
+      }, 1500);
+    });
+  }
+
+  // Mobile menu
+  const mobileMenuBtn = document.getElementById('mobileMenuBtn');
+  const sidebar = document.getElementById('sidebar');
+  if (mobileMenuBtn && sidebar) {
+    mobileMenuBtn.addEventListener('click', () => {
+      sidebar.classList.toggle('sidebar--open');
+    });
+  }
+
+  // Close sidebar on link click (mobile)
+  document.querySelectorAll('.sidebar__link').forEach(link => {
+    link.addEventListener('click', () => {
+      if (sidebar) sidebar.classList.remove('sidebar--open');
     });
   });
+
+  // PWA Install button
+  const installBtn = document.getElementById('installAppBtn');
+  if (installBtn && deferredInstallPrompt) {
+    installBtn.style.display = 'flex';
+    installBtn.addEventListener('click', async () => {
+      if (!deferredInstallPrompt) return;
+      deferredInstallPrompt.prompt();
+      const { outcome } = await deferredInstallPrompt.userChoice;
+      if (outcome === 'accepted') {
+        showToast('Installing app... 📱', 'success');
+      }
+      deferredInstallPrompt = null;
+      installBtn.style.display = 'none';
+    });
+  }
+}
+
+function initLoginPage() {
+  const form = document.getElementById('loginForm');
+  if (form) {
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const btn = document.getElementById('loginBtn');
+      btn.classList.add('btn--loading');
+      btn.innerHTML = '<div class="spinner"></div><span>Signing in...</span>';
+      
+      setTimeout(() => {
+        isLoggedIn = true;
+        window.location.hash = '#/dashboard';
+        renderApp();
+        showToast(`Welcome back, ${Store.getAuth().name.split(' ')[0]}!`, 'success');
+      }, 800);
+    });
+  }
+}
+
+// ─── PWA Install Prompt ───
+let deferredInstallPrompt = null;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  // Show the install button if it exists
+  const installBtn = document.getElementById('installAppBtn');
+  if (installBtn) installBtn.style.display = 'flex';
+});
+
+window.addEventListener('appinstalled', () => {
+  deferredInstallPrompt = null;
+  const installBtn = document.getElementById('installAppBtn');
+  if (installBtn) installBtn.style.display = 'none';
+  showToast('App installed successfully! 📱', 'success');
+});
+
+// ─── Initialize ───
+function init() {
+  Store.init();
+  
+  window.addEventListener('hashchange', () => {
+    if (isLoggedIn) renderApp();
+  });
+
+  renderApp();
+}
+
+// Wait for DOM
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', init);
+} else {
+  init();
 }
