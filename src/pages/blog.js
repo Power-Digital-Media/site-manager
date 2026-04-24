@@ -206,7 +206,7 @@ function renderPostEditor(post = null) {
           ${tier === 'free' ? `
             <div class="ai-tools-panel__body">
               <p>Get AI-optimized titles, descriptions & keywords.</p>
-              <button class="btn btn--accent btn--sm" id="upgradeTierBtn">Upgrade to AI Pro — $49/mo</button>
+              <button class="btn btn--accent btn--sm" id="upgradeTierBtn">Upgrade to AI Pro — $29/mo</button>
             </div>
           ` : `
             <div class="ai-tools-panel__body ai-tools-panel__body--unlocked">

@@ -73,7 +73,7 @@ export function renderSubmissions() {
         <p>Upgrade to <strong>AI Pro</strong> for unlimited inbox access</p>
         <button class="btn btn--accent btn--sm" id="submissionsUpgradeBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-          Upgrade — $49/mo
+          Upgrade — $29/mo
         </button>
       </div>
     </div>

@@ -193,7 +193,7 @@ function renderProductEditor(product = null) {
           ${tier === 'free' ? `
             <div class="ai-tools-panel__body">
               <p>Get AI-generated product descriptions.</p>
-              <button class="btn btn--accent btn--sm">Upgrade to AI Pro — $49/mo</button>
+              <button class="btn btn--accent btn--sm">Upgrade to AI Pro — $29/mo</button>
             </div>
           ` : `
             <div class="ai-tools-panel__body ai-tools-panel__body--unlocked">
