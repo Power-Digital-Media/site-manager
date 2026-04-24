@@ -324,6 +324,14 @@ export function initBlog(rerender) {
     });
   }
 
+  // Upgrade CTA → navigate to AI tools page
+  const upgradeTierBtn = document.getElementById('upgradeTierBtn');
+  if (upgradeTierBtn) {
+    upgradeTierBtn.addEventListener('click', () => {
+      window.location.hash = '#/ai-tools';
+    });
+  }
+
   // Character counters
   initCharCounter('postTitle', 'titleCounter', CHAR_LIMITS.postTitle);
   initCharCounter('postExcerpt', 'excerptCounter', CHAR_LIMITS.postExcerpt);
