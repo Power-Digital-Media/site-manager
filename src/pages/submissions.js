@@ -38,11 +38,48 @@ function getFormIcon(formName) {
 }
 
 export function renderSubmissions() {
-  const submissions = Store.getSubmissions();
+  const allSubmissions = Store.getSubmissions();
   const unread = Store.getUnreadCount();
+  const tier = Store.getTier();
+  const FREE_LIMIT = 10;
+  const isFree = tier === 'free';
+  const isLimited = isFree && allSubmissions.length > FREE_LIMIT;
+  const submissions = isLimited ? allSubmissions.slice(0, FREE_LIMIT) : allSubmissions;
+  const hiddenCount = isLimited ? allSubmissions.length - FREE_LIMIT : 0;
   const selected = selectedSubmissionId ? Store.getSubmission(selectedSubmissionId) : null;
 
-  const inbox = submissions.length === 0
+  const upgradeCtaBanner = isLimited ? `
+    <div class="submissions-upgrade-cta">
+      <div class="submissions-upgrade-cta__blur">
+        ${allSubmissions.slice(FREE_LIMIT, FREE_LIMIT + 3).map(sub => `
+          <div class="submission-row submission-row--ghost">
+            <div class="submission-row__icon">${getFormIcon(sub.formName)}</div>
+            <div class="submission-row__info">
+              <div class="submission-row__header">
+                <span class="submission-row__name">${sub.name}</span>
+                <span class="submission-row__time">${formatDate(sub.createdAt)}</span>
+              </div>
+              <span class="submission-row__form">${sub.formName}</span>
+              <p class="submission-row__preview">${sub.message.slice(0, 80)}…</p>
+            </div>
+          </div>
+        `).join('')}
+      </div>
+      <div class="submissions-upgrade-cta__overlay">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="24">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+        </svg>
+        <h4>${hiddenCount} more submission${hiddenCount !== 1 ? 's' : ''} hidden</h4>
+        <p>Upgrade to <strong>AI Pro</strong> for unlimited inbox access</p>
+        <button class="btn btn--accent btn--sm" id="submissionsUpgradeBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          Upgrade — $49/mo
+        </button>
+      </div>
+    </div>
+  ` : '';
+
+  const inbox = allSubmissions.length === 0
     ? `<div class="empty-state">
         <div class="empty-state__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></div>
         <h3>No submissions yet</h3>
@@ -65,6 +102,7 @@ export function renderSubmissions() {
               ${!sub.read ? '<span class="submission-row__dot"></span>' : ''}
             </div>
           `).join('')}
+          ${upgradeCtaBanner}
         </div>
 
         <div class="submission-detail" id="submissionDetail">
@@ -170,6 +208,14 @@ export function initSubmissions(rerender) {
       });
     });
   });
+
+  // Submissions upgrade CTA
+  const upgradeBtn = document.getElementById('submissionsUpgradeBtn');
+  if (upgradeBtn) {
+    upgradeBtn.addEventListener('click', () => {
+      window.location.hash = '#/ai-tools';
+    });
+  }
 }
 
 export function resetSubmissionsView() {

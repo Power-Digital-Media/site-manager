@@ -26,6 +26,7 @@ import { renderAiTools, initAiTools } from './pages/ai-tools.js';
 import { renderAdmin, initAdmin, resetAdminView } from './pages/admin.js';
 import { renderModuleActivationPage, initModuleActivation } from './components/module-activation-card.js';
 import { showToast } from './components/toast.js';
+import { handleStripeRedirect } from './stripe.js';
 
 // ─── App State ──────────────────────────────────────────────────
 let isAuthenticated = false;
@@ -296,6 +297,9 @@ function init() {
       window.location.hash = window.location.hash || '#/dashboard';
       renderApp();
       showToast(`Welcome back, ${getDisplayName()}!`, 'success');
+
+      // Handle Stripe checkout redirects (success/cancel)
+      handleStripeRedirect();
     } else {
       // User is signed out
       isAuthenticated = false;

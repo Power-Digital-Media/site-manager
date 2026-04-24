@@ -3,12 +3,32 @@
  */
 
 import { Store } from '../store.js';
+import { isAdmin, getCurrentUser } from '../auth.js';
 import { showToast } from '../components/toast.js';
 import { openModal, closeModal, confirmModal } from '../components/modal.js';
+import { TIER_CONFIG } from '../constants.js';
+
+// Module labels for the reset UI
+const MODULE_LABELS = {
+  pages:          { label: 'Pages',         icon: '📄' },
+  settings:       { label: 'Settings',      icon: '⚙️' },
+  blogConfig:     { label: 'Blog Config',   icon: '📝' },
+  blogPosts:      { label: 'Blog Posts',     icon: '✍️' },
+  productsConfig: { label: 'Products Config',icon: '🏷️' },
+  products:       { label: 'Products',      icon: '📦' },
+  events:         { label: 'Events',        icon: '📅' },
+  announcements:  { label: 'Announcements', icon: '📢' },
+  team:           { label: 'Team Members',  icon: '👥' },
+  gallery:        { label: 'Gallery',       icon: '🖼️' },
+};
+
+// Cached defaults status
+let _defaultsInfo = null;
 
 export function renderSettings() {
   const settings = Store.getSettings();
   const integration = Store.getIntegrationSettings();
+  const admin = isAdmin();
 
   return `
     <div class="settings-page">
@@ -133,6 +153,13 @@ export function renderSettings() {
         </div>
 
         <!-- Site Metadata -->
+        ${(() => {
+          const tier = Store.getTier();
+          const admin = isAdmin();
+          const canAccessSEO = admin || tier === 'business';
+          
+          if (canAccessSEO) {
+            return `
         <div class="settings-card">
           <div class="settings-card__header">
             <div>
@@ -157,9 +184,61 @@ export function renderSettings() {
               <button type="submit" class="btn btn--primary btn--sm">Save Metadata</button>
             </form>
           </div>
-        </div>
+        </div>`;
+          } else {
+            const bizConfig = TIER_CONFIG.business;
+            return `
+        <div class="settings-card settings-card--locked">
+          <div class="settings-card__header">
+            <div>
+              <h3 class="settings-card__title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                SEO & Metadata
+                <span class="settings-card__tier-badge">${bizConfig.label}</span>
+              </h3>
+              <p class="text-muted">Control how your site appears in Google, social shares, and browser tabs.</p>
+            </div>
+          </div>
+          <div class="settings-card__body settings-card__body--locked">
+            <div class="settings-card__locked-preview">
+              <div class="form-group" style="opacity:0.35;pointer-events:none">
+                <label class="form-label">Site Title</label>
+                <input type="text" class="form-input" disabled placeholder="Your Site Name" />
+              </div>
+              <div class="form-group" style="opacity:0.35;pointer-events:none">
+                <label class="form-label">Site Description</label>
+                <textarea class="form-input form-textarea" disabled rows="2" placeholder="A brief description shown in Google search results..."></textarea>
+              </div>
+            </div>
+            <div class="settings-card__upgrade-overlay">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <h4>Unlock SEO & Metadata</h4>
+              <p>Take control of your search rankings and social media previews with the <strong>${bizConfig.label}</strong> plan.</p>
+              <ul class="settings-card__perks">
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14"><polyline points="20 6 9 17 4 12"/></svg> Custom site title & meta description</li>
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14"><polyline points="20 6 9 17 4 12"/></svg> Social share image & Open Graph tags</li>
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14"><polyline points="20 6 9 17 4 12"/></svg> ${bizConfig.aiActions} AI actions/month</li>
+              </ul>
+              <button class="btn btn--accent btn--sm" id="seoUpgradeBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                Upgrade to ${bizConfig.label} — $${bizConfig.price}/mo
+              </button>
+            </div>
+          </div>
+        </div>`;
+          }
+        })()}
 
         <!-- Live Site Integration -->
+        ${(() => {
+          const tier = Store.getTier();
+          const admin = isAdmin();
+          const canAccess = admin || tier === 'business';
+          
+          if (canAccess) {
+            return `
         <div class="settings-card">
           <div class="settings-card__header">
             <div>
@@ -198,16 +277,103 @@ export function renderSettings() {
               </div>
             </form>
           </div>
-        </div>
+        </div>`;
+          } else {
+            const bizConfig = TIER_CONFIG.business;
+            return `
+        <div class="settings-card settings-card--locked">
+          <div class="settings-card__header">
+            <div>
+              <h3 class="settings-card__title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Live Site Integration
+                <span class="settings-card__tier-badge">${bizConfig.label}</span>
+              </h3>
+              <p class="text-muted">Connect this CMS to your live website for automatic content publishing.</p>
+            </div>
+          </div>
+          <div class="settings-card__body settings-card__body--locked">
+            <div class="settings-card__locked-preview">
+              <div class="form-group" style="opacity:0.35;pointer-events:none">
+                <label class="form-label">Live Site URL</label>
+                <input type="url" class="form-input" disabled placeholder="https://yoursite.com" />
+              </div>
+              <div class="form-group" style="opacity:0.35;pointer-events:none">
+                <label class="form-label">Deploy Hook URL</label>
+                <input type="url" class="form-input" disabled placeholder="https://api.netlify.com/build_hooks/..." />
+              </div>
+            </div>
+            <div class="settings-card__upgrade-overlay">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28">
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+              </svg>
+              <h4>Unlock Live Site Integration</h4>
+              <p>Auto-deploy content changes directly to your website with the <strong>${bizConfig.label}</strong> plan.</p>
+              <ul class="settings-card__perks">
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14"><polyline points="20 6 9 17 4 12"/></svg> One-click deploy to Netlify / Vercel</li>
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14"><polyline points="20 6 9 17 4 12"/></svg> Auto-deploy on content publish</li>
+                <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14"><polyline points="20 6 9 17 4 12"/></svg> ${bizConfig.aiActions} AI actions/month</li>
+              </ul>
+              <button class="btn btn--accent btn--sm" id="integrationUpgradeBtn">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                Upgrade to ${bizConfig.label} — $${bizConfig.price}/mo
+              </button>
+            </div>
+          </div>
+        </div>`;
+          }
+        })()}
 
-        <!-- Danger Zone -->
+        ${admin ? `
+        <!-- ADMIN ONLY: Save Defaults -->
+        <div class="settings-card" style="border: 2px solid var(--primary); background: var(--primary-bg);">
+          <div class="settings-card__header">
+            <div>
+              <h3 class="settings-card__title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="var(--primary)" stroke-width="1.5" width="20"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                Save Default State
+                <span style="font-size:0.7rem;background:var(--primary);color:white;padding:2px 8px;border-radius:10px;margin-left:8px">ADMIN</span>
+              </h3>
+              <p class="text-muted">Snapshot the current site as the "golden" fallback. If the client breaks anything, you can restore this state.</p>
+            </div>
+          </div>
+          <div class="settings-card__body">
+            <div id="defaultsStatus" style="margin-bottom:12px">
+              <p class="text-muted" style="font-size:0.85rem">Checking defaults status…</p>
+            </div>
+            <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+              <button class="btn btn--primary" id="saveDefaultsBtn">
+                🛡️ Save Current State as Default
+              </button>
+            </div>
+          </div>
+        </div>
+        ` : ''}
+
+        <!-- Reset to Defaults -->
         <div class="settings-card settings-card--danger">
           <div class="settings-card__header">
             <div>
-              <h3 class="settings-card__title">⚠️ Reset Demo Data</h3>
-              <p class="text-muted">Reset all content back to the original demo data. This cannot be undone.</p>
+              <h3 class="settings-card__title">🔄 Reset to Defaults</h3>
+              <p class="text-muted">Restore content sections back to their original state. This undoes changes you've made.</p>
             </div>
-            <button class="btn btn--danger btn--sm" id="resetDataBtn">Reset All Data</button>
+          </div>
+          <div class="settings-card__body">
+            <p class="text-muted" style="font-size:0.85rem;margin-bottom:16px">Choose individual sections to reset, or reset everything at once.</p>
+            
+            <div class="defaults-grid" style="display:grid;grid-template-columns:repeat(auto-fill, minmax(180px, 1fr));gap:8px;margin-bottom:16px">
+              ${Object.entries(MODULE_LABELS).map(([key, mod]) => `
+                <button class="btn btn--outline btn--sm" data-reset-module="${key}" style="justify-content:flex-start;gap:6px">
+                  ${mod.icon} Reset ${mod.label}
+                </button>
+              `).join('')}
+            </div>
+
+            <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:8px">
+              <button class="btn btn--danger" id="resetAllBtn">
+                ⚠️ Reset Everything to Defaults
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -370,6 +536,22 @@ export function initSettings(rerender) {
       deployNowBtn.disabled = false;
       deployNowBtn.textContent = '🚀 Deploy Now';
       if (result.success) rerender();
+    });
+  }
+
+  // Integration upgrade CTA (shown to Free/Pro users)
+  const integrationUpgradeBtn = document.getElementById('integrationUpgradeBtn');
+  if (integrationUpgradeBtn) {
+    integrationUpgradeBtn.addEventListener('click', () => {
+      window.location.hash = '#/ai-tools';
+    });
+  }
+
+  // SEO upgrade CTA (shown to Free/Pro users)
+  const seoUpgradeBtn = document.getElementById('seoUpgradeBtn');
+  if (seoUpgradeBtn) {
+    seoUpgradeBtn.addEventListener('click', () => {
+      window.location.hash = '#/ai-tools';
     });
   }
 

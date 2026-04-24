@@ -28,8 +28,9 @@ import {
   serverTimestamp,
   writeBatch,
   where,
+  increment,
 } from 'firebase/firestore';
-import { CHAR_LIMITS, BLOG_CATEGORY_PRESETS, PRODUCT_CATEGORY_PRESETS, MODULE_DEFINITIONS } from './constants.js';
+import { CHAR_LIMITS, BLOG_CATEGORY_PRESETS, PRODUCT_CATEGORY_PRESETS, MODULE_DEFINITIONS, TIER_CONFIG } from './constants.js';
 
 // Re-export constants for backward compatibility
 export { CHAR_LIMITS, BLOG_CATEGORY_PRESETS, PRODUCT_CATEGORY_PRESETS };
@@ -196,6 +197,56 @@ export const Store = {
   },
 
   // ═════════════════════════════════════════════════════════════
+  // TIER & AI CREDITS
+  // ═════════════════════════════════════════════════════════════
+
+  /**
+   * Get the current site's subscription tier.
+   * Returns 'free', 'pro', or 'business'.
+   */
+  getTier() {
+    return (_siteConfig && _siteConfig.tier) || 'free';
+  },
+
+  /**
+   * Get auth-related state the AI tools page expects.
+   * Returns { aiActionsRemaining, tier, siteId }.
+   */
+  getAuth() {
+    const cfg = TIER_CONFIG[this.getTier()] || TIER_CONFIG.free;
+    return {
+      aiActionsRemaining: (_siteConfig && _siteConfig.aiActionsRemaining != null)
+        ? _siteConfig.aiActionsRemaining
+        : cfg.aiActions,
+      tier: this.getTier(),
+      siteId: _siteId,
+    };
+  },
+
+  /**
+   * Deduct AI credits from the current site.
+   * Throws if insufficient credits.
+   */
+  async deductAiCredits(count = 1) {
+    if (!_siteId) throw new Error('No site loaded.');
+
+    const authState = this.getAuth();
+    if (authState.aiActionsRemaining < count) {
+      throw new Error(`Not enough credits. You have ${authState.aiActionsRemaining}, but this action costs ${count}.`);
+    }
+
+    const siteRef = doc(db, 'sites', _siteId);
+    await updateDoc(siteRef, {
+      aiActionsRemaining: increment(-count),
+    });
+
+    // Update local cache so the UI reflects immediately
+    if (_siteConfig) {
+      _siteConfig.aiActionsRemaining = (authState.aiActionsRemaining - count);
+    }
+  },
+
+  // ═════════════════════════════════════════════════════════════
   // SITE CONFIG & MODULE ACTIVATION
   // ═════════════════════════════════════════════════════════════
 
@@ -264,17 +315,23 @@ export const Store = {
   // ═════════════════════════════════════════════════════════════
 
   getAuth() {
+    const tier = _siteConfig?.tier || 'free';
+    const tierCfg = TIER_CONFIG[tier] || TIER_CONFIG.free;
     return {
       email: _siteConfig?.ownerEmail || '',
       name: _siteConfig?.ownerName || _userDisplayName,
       role: 'Site Administrator',
-      tier: _siteConfig?.tier || 'free',
-      aiActionsRemaining: _siteConfig?.aiActionsRemaining || 0,
+      tier,
+      aiActionsRemaining: _siteConfig?.aiActionsRemaining ?? tierCfg.aiActions,
       aiActionsResetDate: _siteConfig?.aiActionsResetDate || null,
     };
   },
   getTier() { return _siteConfig?.tier || 'free'; },
-  getAiActions() { return _siteConfig?.aiActionsRemaining || 0; },
+  getAiActions() {
+    const tier = _siteConfig?.tier || 'free';
+    const tierCfg = TIER_CONFIG[tier] || TIER_CONFIG.free;
+    return _siteConfig?.aiActionsRemaining ?? tierCfg.aiActions;
+  },
 
   // ═════════════════════════════════════════════════════════════
   // PAGES
@@ -916,6 +973,179 @@ export const Store = {
    */
   stopRealtimeSync() {
     this._cleanupListeners();
+  },
+
+  // ═════════════════════════════════════════════════════════════
+  // DEFAULTS / SNAPSHOT SYSTEM
+  // ═════════════════════════════════════════════════════════════
+
+  /**
+   * Module definitions for snapshot/restore.
+   * Maps module name → whether it's a doc or a collection in Firestore.
+   */
+  _defaultModules: {
+    // Docs (stored at sites/{siteId}/docs/{name})
+    pages:          { type: 'doc',        cacheKey: 'pages' },
+    blogConfig:     { type: 'doc',        cacheKey: 'blog' },
+    productsConfig: { type: 'doc',        cacheKey: 'productsConfig' },
+    settings:       { type: 'doc',        cacheKey: 'settings' },
+    // Collections (stored at sites/{siteId}/{name})
+    events:         { type: 'collection', cacheKey: 'events' },
+    announcements:  { type: 'collection', cacheKey: 'announcements' },
+    team:           { type: 'collection', cacheKey: 'team' },
+    blogPosts:      { type: 'collection', cacheKey: 'blogPosts' },
+    products:       { type: 'collection', cacheKey: 'products' },
+    gallery:        { type: 'collection', cacheKey: 'gallery' },
+  },
+
+  /**
+   * Save the current state of ALL modules as the default snapshot.
+   * Admin-only. Stores everything under sites/{siteId}/defaults/.
+   * 
+   * Structure:
+   *   sites/{siteId}/defaults/meta          → { savedAt, savedBy }
+   *   sites/{siteId}/defaults/docs/{name}   → snapshot of each doc
+   *   sites/{siteId}/defaults/{collection}/  → snapshot of each collection
+   */
+  async saveDefaults(adminEmail) {
+    if (!_siteId) throw new Error('No site loaded');
+
+    const defaultsBase = `sites/${_siteId}/defaults`;
+    
+    // Save the metadata
+    await setDoc(doc(db, defaultsBase, 'meta'), {
+      savedAt: new Date().toISOString(),
+      savedBy: adminEmail || 'admin',
+      version: 1,
+    });
+
+    // Snapshot each module
+    for (const [moduleName, config] of Object.entries(this._defaultModules)) {
+      if (config.type === 'doc') {
+        // Load the live doc and save a copy
+        const liveData = await this._loadDoc(moduleName);
+        if (liveData) {
+          await setDoc(
+            doc(db, defaultsBase, 'docs', moduleName, 'data'),
+            liveData
+          );
+        }
+      } else {
+        // Load the live collection and save copies
+        const liveItems = await this._loadCollection(moduleName);
+        
+        // Clear the existing defaults for this collection first
+        const existingSnap = await getDocs(collection(db, defaultsBase, moduleName));
+        const clearBatch = writeBatch(db);
+        existingSnap.docs.forEach(d => clearBatch.delete(d.ref));
+        if (existingSnap.docs.length > 0) await clearBatch.commit();
+
+        // Write all items in batches (Firestore limit: 500 per batch)
+        for (let i = 0; i < liveItems.length; i += 450) {
+          const batch = writeBatch(db);
+          const chunk = liveItems.slice(i, i + 450);
+          chunk.forEach(item => {
+            const itemId = item.id || generateId(moduleName);
+            const { id, ...data } = item; // Remove the id field from the data
+            batch.set(doc(db, defaultsBase, moduleName, itemId), data);
+          });
+          await batch.commit();
+        }
+      }
+    }
+
+    // Log the activity
+    this._logActivity('Default state saved by admin', 'shield');
+    return true;
+  },
+
+  /**
+   * Check if defaults have been saved for this site.
+   * @returns {Promise<{saved: boolean, savedAt?: string, savedBy?: string}>}
+   */
+  async hasDefaults() {
+    if (!_siteId) return { saved: false };
+    try {
+      const metaSnap = await getDoc(doc(db, `sites/${_siteId}/defaults`, 'meta'));
+      if (metaSnap.exists()) {
+        const data = metaSnap.data();
+        return { saved: true, savedAt: data.savedAt, savedBy: data.savedBy };
+      }
+      return { saved: false };
+    } catch (err) {
+      console.warn('Store: failed to check defaults', err);
+      return { saved: false };
+    }
+  },
+
+  /**
+   * Reset a single module back to its default state.
+   * @param {string} moduleName - e.g. 'events', 'settings', 'blogPosts'
+   */
+  async resetModule(moduleName) {
+    if (!_siteId) throw new Error('No site loaded');
+    const config = this._defaultModules[moduleName];
+    if (!config) throw new Error(`Unknown module: ${moduleName}`);
+
+    const defaultsBase = `sites/${_siteId}/defaults`;
+
+    if (config.type === 'doc') {
+      // Load the default doc
+      const defaultSnap = await getDoc(doc(db, defaultsBase, 'docs', moduleName, 'data'));
+      if (!defaultSnap.exists()) throw new Error(`No defaults saved for ${moduleName}`);
+      
+      // Overwrite the live doc
+      await this._setDoc(moduleName, defaultSnap.data());
+      _cache[config.cacheKey] = defaultSnap.data();
+
+    } else {
+      // Load the default collection
+      const defaultSnap = await getDocs(collection(db, defaultsBase, moduleName));
+      if (defaultSnap.empty) throw new Error(`No defaults saved for ${moduleName}`);
+
+      // Delete all live items
+      const liveSnap = await getDocs(collection(db, 'sites', _siteId, moduleName));
+      const deleteBatch = writeBatch(db);
+      liveSnap.docs.forEach(d => deleteBatch.delete(d.ref));
+      if (liveSnap.docs.length > 0) await deleteBatch.commit();
+
+      // Restore from defaults
+      for (let i = 0; i < defaultSnap.docs.length; i += 450) {
+        const batch = writeBatch(db);
+        const chunk = defaultSnap.docs.slice(i, i + 450);
+        chunk.forEach(d => {
+          batch.set(doc(db, 'sites', _siteId, moduleName, d.id), d.data());
+        });
+        await batch.commit();
+      }
+
+      // Update cache
+      _cache[config.cacheKey] = defaultSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    }
+
+    // Log it
+    this._logActivity(`"${moduleName}" reset to defaults`, 'undo');
+    return true;
+  },
+
+  /**
+   * Reset ALL modules back to their default state.
+   */
+  async resetAll() {
+    if (!_siteId) throw new Error('No site loaded');
+    
+    const results = [];
+    for (const moduleName of Object.keys(this._defaultModules)) {
+      try {
+        await this.resetModule(moduleName);
+        results.push({ module: moduleName, success: true });
+      } catch (err) {
+        results.push({ module: moduleName, success: false, error: err.message });
+      }
+    }
+
+    this._logActivity('All modules reset to defaults', 'undo');
+    return results;
   },
 
   // ═════════════════════════════════════════════════════════════

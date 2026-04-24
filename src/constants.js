@@ -96,6 +96,7 @@ export const MODULE_DEFINITIONS = {
     icon: 'blog',
     alwaysActive: false,
     category: 'content',
+    requiredTier: 'pro',
   },
   products: {
     id: 'products',
@@ -104,6 +105,7 @@ export const MODULE_DEFINITIONS = {
     icon: 'product',
     alwaysActive: false,
     category: 'content',
+    requiredTier: 'pro',
   },
   events: {
     id: 'events',
@@ -112,6 +114,7 @@ export const MODULE_DEFINITIONS = {
     icon: 'calendar',
     alwaysActive: false,
     category: 'content',
+    requiredTier: 'pro',
   },
   gallery: {
     id: 'gallery',
@@ -120,6 +123,7 @@ export const MODULE_DEFINITIONS = {
     icon: 'gallery',
     alwaysActive: false,
     category: 'content',
+    requiredTier: 'pro',
   },
   announcements: {
     id: 'announcements',
@@ -128,6 +132,7 @@ export const MODULE_DEFINITIONS = {
     icon: 'megaphone',
     alwaysActive: false,
     category: 'content',
+    requiredTier: 'pro',
   },
   team: {
     id: 'team',
@@ -136,6 +141,7 @@ export const MODULE_DEFINITIONS = {
     icon: 'team',
     alwaysActive: false,
     category: 'content',
+    requiredTier: 'pro', // Requires Pro or Business tier
   },
   submissions: {
     id: 'submissions',
@@ -165,8 +171,81 @@ export const IMAGE_SLOTS = {
 };
 
 // ─── Tier Config ────────────────────────────────────────────────
+// Free tier uses lightweight models (Gemini Flash) to keep costs ~$0.01/action.
+// Pro/Business use full models for richer output.
 export const TIER_CONFIG = {
-  free: { label: 'Free', aiActions: 0, price: 0 },
-  pro: { label: 'AI Pro', aiActions: 50, price: 49 },
-  business: { label: 'AI Business', aiActions: 200, price: 99 },
+  free: {
+    label: 'Free',
+    aiActions: 5,
+    price: 0,
+    model: 'flash',          // lightweight — keeps cost per free user < $0.05/mo
+    imageGen: 'basic',       // basic Gemini / OpenAI gen (free/cheap)
+    features: ['SEO title suggestions', 'Meta description drafts', 'Basic schema hints', 'Basic image generation'],
+  },
+  pro: {
+    label: 'AI Pro',
+    aiActions: 30,
+    price: 29,
+    model: 'pro',
+    imageGen: 'premium',     // basic free + premium pay-per-gen
+    features: [
+      'SEO title & meta optimization',
+      'Blog post draft assistance',
+      'Product description generator',
+      'Auto JSON-LD schema',
+      'Auto llms.txt generation',
+      'Premium image generation (pay-per-gen)',
+    ],
+  },
+  business: {
+    label: 'AI Business',
+    aiActions: 200,
+    price: 99,
+    model: 'pro',
+    imageGen: 'premium',     // basic free + premium pay-per-gen
+    features: [
+      'Everything in AI Pro',
+      'Full blog post generation',
+      'Social media post generator',
+      'Competitor keyword analysis',
+      'Priority support',
+      'Premium image generation (pay-per-gen)',
+    ],
+  },
+};
+
+// ─── Image Generation Pricing ───────────────────────────────────
+// Basic gen (Gemini Flash / standard OpenAI) is free for all tiers.
+// Premium models are pay-per-generation for Pro and Business users.
+export const IMAGE_GEN_PRICING = {
+  basic: {
+    label: 'Standard',
+    models: {
+      gemini:  { label: 'Gemini Image Gen',   price: 0, desc: 'Good quality, fast generation' },
+      openai:  { label: 'OpenAI Standard',    price: 0, desc: 'Reliable, versatile output' },
+    },
+  },
+  premium: {
+    label: 'Premium',
+    models: {
+      nanoBanana: { label: 'Nano Banana Pro',  price: 0.50, desc: 'Google\'s top-tier — subject consistency, text-in-image, photorealistic' },
+      dalle:      { label: 'DALL-E 2.0',       price: 0.75, desc: 'OpenAI\'s best — stunning thumbnails, creative compositions' },
+    },
+  },
+};
+
+// ─── One-Time AI Action Pricing ─────────────────────────────────
+// For users who don't want a monthly plan. Priced at ~100x API cost
+// so the monthly plan is obviously the better deal. This captures
+// revenue from commitment-averse users while making Pro/Business
+// look like a steal.
+export const AI_ACTION_PRICING = {
+  seo:         { label: 'SEO Title + Meta',       price: 0.99, desc: 'AI-optimized title tag and meta description' },
+  blogDraft:   { label: 'Blog Post Draft',        price: 2.99, desc: 'Full SEO-optimized blog post with heading structure' },
+  blogFull:    { label: 'Full Blog (SEO+AEO+GEO)', price: 4.99, desc: 'Complete blog with schema, breadcrumbs, llms.txt, GEO optimization' },
+  productDesc: { label: 'Product Description',    price: 1.99, desc: 'Conversion-optimized product copy with schema' },
+  schema:      { label: 'JSON-LD Schema',         price: 0.99, desc: 'Auto-generated structured data for any page' },
+  llmsTxt:     { label: 'llms.txt Generation',    price: 0.99, desc: 'AI-readable site summary for LLM discoverability' },
+  socialPosts: { label: 'Social Media Posts',      price: 1.99, desc: 'Platform-optimized posts from your content' },
+  keywords:    { label: 'Keyword Research',        price: 2.99, desc: 'High-impact keywords for your industry and location' },
 };

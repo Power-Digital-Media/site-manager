@@ -5,7 +5,7 @@
 
 import { Store } from '../store.js';
 import { isAdmin } from '../auth.js';
-import { MODULE_DEFINITIONS } from '../constants.js';
+import { MODULE_DEFINITIONS, TIER_CONFIG } from '../constants.js';
 import { renderModuleActivationCard } from '../components/module-activation-card.js';
 import { showToast } from '../components/toast.js';
 
@@ -144,6 +144,13 @@ export function renderDashboard() {
           <span class="mini-stat__value">${tier === 'free' ? 'Free' : tier.toUpperCase()}</span>
           <span class="mini-stat__label">Plan</span>
         </div>
+        <div class="mini-stat mini-stat--ai-credits">
+          <span class="mini-stat__icon mini-stat__icon--accent">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14" height="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+          </span>
+          <span class="mini-stat__value">${auth.aiActionsRemaining}</span>
+          <span class="mini-stat__label">AI Credits</span>
+        </div>
       </div>
 
       ${inactiveModules.length > 0 ? `
@@ -209,7 +216,8 @@ export function renderDashboard() {
       </div>
 
       <div class="dashboard__grid">
-        <!-- Recent Activity — always shown -->
+        <!-- Recent Activity — gated for free tier -->
+        ${tier !== 'free' ? `
         <div class="dashboard__section">
           <div class="dashboard__section-header">
             <h3>Recent Activity</h3>
@@ -227,7 +235,29 @@ export function renderDashboard() {
               </div>
             `).join('') : '<p class="empty-state-inline">No recent activity</p>'}
           </div>
-        </div>
+        </div>` : `
+        <div class="dashboard__section dashboard__section--locked">
+          <div class="dashboard__section-header">
+            <h3>Recent Activity <span class="dashboard__tier-badge">Pro</span></h3>
+          </div>
+          <div class="dashboard__activity-locked">
+            <div class="dashboard__activity-preview">
+              <div class="activity-item activity-item--fake"><div class="activity-item__icon activity-item__icon--edit">${getActivityIcon('edit')}</div><div class="activity-item__info"><span class="activity-item__action">Updated homepage content</span><span class="activity-item__time">2h ago</span></div></div>
+              <div class="activity-item activity-item--fake"><div class="activity-item__icon activity-item__icon--calendar">${getActivityIcon('calendar')}</div><div class="activity-item__info"><span class="activity-item__action">Published new event</span><span class="activity-item__time">5h ago</span></div></div>
+              <div class="activity-item activity-item--fake"><div class="activity-item__icon activity-item__icon--user">${getActivityIcon('user')}</div><div class="activity-item__info"><span class="activity-item__action">Added team member</span><span class="activity-item__time">1d ago</span></div></div>
+            </div>
+            <div class="dashboard__activity-overlay">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="28"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+              <h4>Unlock Activity Feed</h4>
+              <p>Track every content change, publish, and edit in real time with the <strong>${TIER_CONFIG.pro.label}</strong> plan.</p>
+              <a href="#/ai-tools" class="btn btn--accent btn--sm">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+                Upgrade to ${TIER_CONFIG.pro.label} — $${TIER_CONFIG.pro.price}/mo
+              </a>
+            </div>
+          </div>
+        </div>`}
+
 
         ${hasAnnouncements ? `
           <!-- Active Announcements -->

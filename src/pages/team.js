@@ -3,24 +3,49 @@
  */
 
 import { Store } from '../store.js';
+import { TIER_CONFIG } from '../constants.js';
 import { showToast } from '../components/toast.js';
 import { openModal, closeModal, confirmModal } from '../components/modal.js';
 
+const FREE_TEAM_LIMIT = 3;
+
 export function renderTeam() {
   const team = Store.getTeam();
+  const tier = Store.getTier();
+  const isFreeTier = tier === 'free';
+  const atLimit = isFreeTier && team.length >= FREE_TEAM_LIMIT;
 
   return `
     <div class="team-page">
       <div class="page-top">
         <div>
           <h2>Team Members</h2>
-          <p class="text-muted">Manage your staff, pastors, and ministry leaders.</p>
+          <p class="text-muted">Manage your staff, pastors, and ministry leaders.${isFreeTier ? ` <span class="text-dim">(${team.length}/${FREE_TEAM_LIMIT} on Free plan)</span>` : ''}</p>
         </div>
-        <button class="btn btn--primary" id="addTeamBtn">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-          Add Team Member
-        </button>
+        ${atLimit ? `
+          <a href="#/ai-tools" class="btn btn--accent" id="teamUpgradeBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+            Upgrade for Unlimited
+          </a>
+        ` : `
+          <button class="btn btn--primary" id="addTeamBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            Add Team Member
+          </button>
+        `}
       </div>
+
+      ${atLimit ? `
+        <div class="team-limit-banner">
+          <div class="team-limit-banner__icon">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+          </div>
+          <div class="team-limit-banner__text">
+            <strong>Team member limit reached</strong>
+            <span>Upgrade to ${TIER_CONFIG.pro.label} to add unlimited team members — $${TIER_CONFIG.pro.price}/mo</span>
+          </div>
+        </div>
+      ` : ''}
 
       <div class="team-grid" id="teamGrid">
         ${team.length ? team.map(m => renderTeamCard(m)).join('') : `
