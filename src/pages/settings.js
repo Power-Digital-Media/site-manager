@@ -8,6 +8,7 @@ import { openModal, closeModal, confirmModal } from '../components/modal.js';
 
 export function renderSettings() {
   const settings = Store.getSettings();
+  const integration = Store.getIntegrationSettings();
 
   return `
     <div class="settings-page">
@@ -158,6 +159,47 @@ export function renderSettings() {
           </div>
         </div>
 
+        <!-- Live Site Integration -->
+        <div class="settings-card">
+          <div class="settings-card__header">
+            <div>
+              <h3 class="settings-card__title">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+                Live Site Integration
+              </h3>
+              <p class="text-muted">Connect this CMS to your live website for automatic content publishing.</p>
+            </div>
+          </div>
+          <div class="settings-card__body">
+            <form id="integrationForm" class="settings-form">
+              <div class="form-group">
+                <label class="form-label">Live Site URL</label>
+                <input type="url" class="form-input" name="liveSiteUrl" value="${integration.liveSiteUrl}" placeholder="https://yoursite.com" />
+                <span class="form-hint">The public URL of your live website.</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label">Deploy Hook URL</label>
+                <input type="url" class="form-input" name="deployHookUrl" value="${integration.deployHookUrl}" placeholder="https://api.netlify.com/build_hooks/..." />
+                <span class="form-hint">Paste your Netlify or Vercel deploy hook URL. Find it in Site Settings → Build & Deploy → Build Hooks.</span>
+              </div>
+              <div class="form-group">
+                <label class="form-label" style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                  <input type="checkbox" name="autoDeploy" ${integration.autoDeploy ? 'checked' : ''} style="width:auto" />
+                  Auto-deploy when content is published
+                </label>
+                <span class="form-hint">When enabled, publishing a blog post or product will automatically trigger a rebuild of your live site.</span>
+              </div>
+              ${integration.lastDeployAt ? `<p class="text-muted" style="font-size:0.85rem">Last deployed: ${new Date(integration.lastDeployAt).toLocaleString()}</p>` : ''}
+              <div style="display:flex;gap:8px;align-items:center">
+                <button type="submit" class="btn btn--primary btn--sm">Save Integration</button>
+                <button type="button" class="btn btn--outline btn--sm" id="deployNowBtn" ${!integration.deployHookUrl ? 'disabled' : ''}>
+                  🚀 Deploy Now
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+
         <!-- Danger Zone -->
         <div class="settings-card settings-card--danger">
           <div class="settings-card__header">
@@ -300,6 +342,36 @@ export function initSettings(rerender) {
       });
     });
   });
+
+  // Integration form
+  const integrationForm = document.getElementById('integrationForm');
+  if (integrationForm) {
+    integrationForm.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const fd = new FormData(integrationForm);
+      Store.updateIntegrationSettings({
+        liveSiteUrl: fd.get('liveSiteUrl') || '',
+        deployHookUrl: fd.get('deployHookUrl') || '',
+        autoDeploy: integrationForm.querySelector('[name="autoDeploy"]').checked,
+      });
+      showToast('Integration settings saved!', 'success');
+      rerender();
+    });
+  }
+
+  // Deploy Now button
+  const deployNowBtn = document.getElementById('deployNowBtn');
+  if (deployNowBtn) {
+    deployNowBtn.addEventListener('click', async () => {
+      deployNowBtn.disabled = true;
+      deployNowBtn.textContent = '⏳ Deploying...';
+      const result = await Store.triggerDeployHook();
+      showToast(result.message, result.success ? 'success' : 'error');
+      deployNowBtn.disabled = false;
+      deployNowBtn.textContent = '🚀 Deploy Now';
+      if (result.success) rerender();
+    });
+  }
 
   // Reset data
   const resetBtn = document.getElementById('resetDataBtn');

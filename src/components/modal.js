@@ -86,3 +86,26 @@ export function confirmModal(message, onConfirm) {
     if (onConfirm) onConfirm();
   });
 }
+
+/**
+ * showModal — convenience wrapper for confirm-style dialogs.
+ * Accepts { title, message, confirmText, confirmClass, onConfirm }.
+ */
+export function showModal({ title = 'Confirm', message = '', confirmText = 'Confirm', confirmClass = 'btn--danger', onConfirm } = {}) {
+  const modal = openModal({
+    title,
+    content: `<p class="modal__confirm-text">${message}</p>`,
+    actions: `
+      <button class="btn btn--ghost" id="modal-cancel">Cancel</button>
+      <button class="btn ${confirmClass}" id="modal-confirm">${confirmText}</button>
+    `,
+    size: 'small',
+  });
+
+  modal.querySelector('#modal-cancel').addEventListener('click', closeModal);
+  modal.querySelector('#modal-confirm').addEventListener('click', () => {
+    closeModal();
+    if (onConfirm) onConfirm();
+  });
+}
+

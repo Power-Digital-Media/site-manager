@@ -1,0 +1,107 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ─── Helper Functions ─────────────────────────────────────
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() &&
+        request.auth.token.email in ['dameindonald.cor@gmail.com', 'damein@powerdigitalmedia.org'];
+    }
+
+    function belongsToSite(siteId) {
+      return isAuthenticated() &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.siteId == siteId;
+    }
+
+    function hasAccessToSite(siteId) {
+      return isAdmin() || belongsToSite(siteId);
+    }
+
+    // ─── User Profiles ────────────────────────────────────────
+    // /users/{uid}
+    match /users/{uid} {
+      // Users can read their own profile
+      allow read: if isAuthenticated() && request.auth.uid == uid;
+      // Admins can read/write any user profile (for onboarding)
+      allow read, write: if isAdmin();
+      // Users can update their own displayName only
+      allow update: if isAuthenticated() && request.auth.uid == uid
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['displayName']);
+    }
+
+    // ─── Site Configuration ───────────────────────────────────
+    // /sites/{siteId}
+    match /sites/{siteId} {
+      // Anyone with access to the site can read its config
+      allow read: if hasAccessToSite(siteId);
+      // Only admins can create/update/delete site configs
+      allow write: if isAdmin();
+
+      // ─── Site Sub-Collections ─────────────────────────────
+      // All content collections under a site
+
+      // Pages
+      match /pages/{pageId} {
+        allow read: if hasAccessToSite(siteId);
+        allow write: if hasAccessToSite(siteId);
+      }
+
+      // Blog posts
+      match /blog/{postId} {
+        allow read: if hasAccessToSite(siteId);
+        allow write: if hasAccessToSite(siteId);
+      }
+
+      // Products
+      match /products/{productId} {
+        allow read: if hasAccessToSite(siteId);
+        allow write: if hasAccessToSite(siteId);
+      }
+
+      // Gallery
+      match /gallery/{itemId} {
+        allow read: if hasAccessToSite(siteId);
+        allow write: if hasAccessToSite(siteId);
+      }
+
+      // Form submissions
+      match /submissions/{submissionId} {
+        allow read: if hasAccessToSite(siteId);
+        // Submissions can be created by anyone (public forms)
+        // but only site members can update/delete
+        allow create: if true;
+        allow update, delete: if hasAccessToSite(siteId);
+      }
+
+      // Settings
+      match /settings/{settingId} {
+        allow read: if hasAccessToSite(siteId);
+        allow write: if hasAccessToSite(siteId);
+      }
+
+      // Analytics
+      match /analytics/{docId} {
+        allow read: if hasAccessToSite(siteId);
+        // Only the system (admin SDK) or admins write analytics
+        allow write: if isAdmin();
+      }
+
+      // Catch-all for future collections under a site
+      match /{collection}/{docId} {
+        allow read: if hasAccessToSite(siteId);
+        allow write: if hasAccessToSite(siteId);
+      }
+    }
+
+    // ─── Global Admin Collections ─────────────────────────────
+    // /admin/{docId} — internal PDM data
+    match /admin/{docId} {
+      allow read, write: if isAdmin();
+    }
+  }
+}

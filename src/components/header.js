@@ -1,15 +1,19 @@
 /**
- * Header Bar
+ * Header Bar — v3.0
+ * Dynamic site name from Firestore + sign out button
  */
 
 import { Store } from '../store.js';
+import { getDisplayName, isAdmin } from '../auth.js';
 
 export function renderHeader(pageTitle) {
   const auth = Store.getAuth();
   const site = Store.getSite();
   
-  const initials = auth.name.split(' ').map(n => n[0]).join('').slice(0, 2);
+  const userName = auth.name || getDisplayName();
+  const initials = userName.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase();
   const lastPub = site.lastPublished ? timeAgo(new Date(site.lastPublished)) : 'Never';
+  const roleLabel = isAdmin() ? 'PDM Admin' : 'Site Administrator';
 
   return `
     <header class="header">
@@ -30,10 +34,17 @@ export function renderHeader(pageTitle) {
         <div class="header__user">
           <div class="header__avatar">${initials}</div>
           <div class="header__user-info">
-            <span class="header__user-name">${auth.name}</span>
-            <span class="header__user-role">${auth.role}</span>
+            <span class="header__user-name">${userName}</span>
+            <span class="header__user-role">${roleLabel}</span>
           </div>
         </div>
+        <button class="header__signout-btn" id="signOutBtn" title="Sign Out">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18">
+            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>
+            <polyline points="16 17 21 12 16 7"/>
+            <line x1="21" y1="12" x2="9" y2="12"/>
+          </svg>
+        </button>
       </div>
     </header>
   `;
