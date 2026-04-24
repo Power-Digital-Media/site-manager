@@ -5,6 +5,7 @@
 import { Store, CHAR_LIMITS } from '../store.js';
 import { showToast } from '../components/toast.js';
 import { showModal, closeModal } from '../components/modal.js';
+import { renderContextualAiPanel, initContextualAiPanel } from '../components/contextual-ai-panel.js';
 
 let currentView = 'list';
 let editingProductId = null;
@@ -184,23 +185,7 @@ function renderProductEditor(product = null) {
           <p class="form-hint">If set, "Buy Now" links to this URL instead of a contact form.</p>
         </div>
 
-        <div class="ai-tools-panel ${tier === 'free' ? 'ai-tools-panel--locked' : ''}">
-          <div class="ai-tools-panel__header">
-            <span class="ai-tools-panel__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
-            <span>AI Tools</span>
-            ${tier === 'free' ? '<span class="sidebar__badge sidebar__badge--pro">PRO</span>' : ''}
-          </div>
-          ${tier === 'free' ? `
-            <div class="ai-tools-panel__body">
-              <p>Get AI-generated product descriptions.</p>
-              <button class="btn btn--accent btn--sm" id="productsUpgradeBtn">Upgrade to AI Pro — $29/mo</button>
-            </div>
-          ` : `
-            <div class="ai-tools-panel__body ai-tools-panel__body--unlocked">
-              <button class="btn btn--accent btn--sm" id="aiGenProductDescBtn">✨ Generate Description</button>
-            </div>
-          `}
-        </div>
+        ${renderContextualAiPanel(['productDesc', 'seo', 'schema'])}
 
         <div class="form-actions">
           ${!isNew ? `<button class="btn btn--danger" id="deleteProductEditorBtn">🗑️ Delete</button>` : '<div></div>'}
@@ -320,21 +305,8 @@ export function initProducts(rerender) {
   if (saveBtn) saveBtn.addEventListener('click', saveProduct);
   if (publishBtn) publishBtn.addEventListener('click', saveProduct);
 
-  // Upgrade CTA → navigate to AI tools page
-  const productsUpgradeBtn = document.getElementById('productsUpgradeBtn');
-  if (productsUpgradeBtn) {
-    productsUpgradeBtn.addEventListener('click', () => {
-      window.location.hash = '#/ai-tools';
-    });
-  }
-
-  // AI Generate Description (placeholder for AI pipeline)
-  const aiGenDescBtn = document.getElementById('aiGenProductDescBtn');
-  if (aiGenDescBtn) {
-    aiGenDescBtn.addEventListener('click', () => {
-      showToast('AI product description generation coming soon!', 'info');
-    });
-  }
+  // Contextual AI panel event wiring
+  initContextualAiPanel(rerender);
 
   // Delete from editor
   const deleteBtn = document.getElementById('deleteProductEditorBtn');

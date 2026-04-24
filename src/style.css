@@ -2405,6 +2405,122 @@ input, textarea, select { font-family: inherit; }
   flex-wrap: wrap;
 }
 
+/* ─── Contextual AI Panel ───────────────────────────── */
+.ctx-ai-panel {
+  border: 1px solid rgba(245, 158, 11, 0.25);
+  border-radius: var(--radius);
+  overflow: hidden;
+  background: linear-gradient(135deg, rgba(245, 158, 11, 0.04), rgba(168, 85, 247, 0.04));
+  margin-top: 0.5rem;
+}
+
+.ctx-ai-panel__header {
+  padding: 12px 16px;
+  background: rgba(245, 158, 11, 0.06);
+  border-bottom: 1px solid rgba(245, 158, 11, 0.15);
+}
+
+.ctx-ai-panel__title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ctx-ai-panel__title svg {
+  width: 16px;
+  height: 16px;
+  color: #f59e0b;
+}
+
+.ctx-ai-credits {
+  margin-left: auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 100px;
+  background: rgba(16, 185, 129, 0.1);
+  color: #10b981;
+}
+
+.ctx-ai-panel__body {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  gap: 12px;
+  padding: 14px;
+}
+
+.ctx-ai-card {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: calc(var(--radius) - 2px);
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+
+.ctx-ai-card:hover {
+  border-color: rgba(245, 158, 11, 0.4);
+  box-shadow: 0 2px 12px rgba(245, 158, 11, 0.08);
+}
+
+.ctx-ai-card__top {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ctx-ai-card__icon {
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.ctx-ai-card__label {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.ctx-ai-card__desc {
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  margin: 0;
+  line-height: 1.35;
+  flex: 1;
+}
+
+.ctx-ai-card__actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 4px;
+  flex-wrap: wrap;
+}
+
+.btn--xs {
+  font-size: 0.7rem;
+  padding: 4px 10px;
+  border-radius: 6px;
+}
+
+.ctx-ai-upgrade-hint {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px;
+  background: rgba(245, 158, 11, 0.06);
+  border-top: 1px solid rgba(245, 158, 11, 0.15);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.ctx-ai-upgrade-hint span {
+  flex-shrink: 0;
+}
+
 /* ─── Form Actions ──────────────────────────────────── */
 .form-actions {
   display: flex;

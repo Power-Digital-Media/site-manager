@@ -5,6 +5,7 @@
 import { Store, CHAR_LIMITS } from '../store.js';
 import { showToast } from '../components/toast.js';
 import { showModal, closeModal } from '../components/modal.js';
+import { renderContextualAiPanel, initContextualAiPanel } from '../components/contextual-ai-panel.js';
 
 let currentView = 'list'; // 'list' | 'editor'
 let editingPostId = null;
@@ -197,25 +198,7 @@ function renderPostEditor(post = null) {
           <p class="form-hint" id="wordCount">${post?.wordCount || 0} words</p>
         </div>
 
-        <div class="ai-tools-panel ${tier === 'free' ? 'ai-tools-panel--locked' : ''}">
-          <div class="ai-tools-panel__header">
-            <span class="ai-tools-panel__icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg></span>
-            <span>AI Tools</span>
-            ${tier === 'free' ? '<span class="sidebar__badge sidebar__badge--pro">PRO</span>' : ''}
-          </div>
-          ${tier === 'free' ? `
-            <div class="ai-tools-panel__body">
-              <p>Get AI-optimized titles, descriptions & keywords.</p>
-              <button class="btn btn--accent btn--sm" id="upgradeTierBtn">Upgrade to AI Pro — $29/mo</button>
-            </div>
-          ` : `
-            <div class="ai-tools-panel__body ai-tools-panel__body--unlocked">
-              <button class="btn btn--accent btn--sm" id="suggestSeoBtn">⚡ Suggest SEO</button>
-              <button class="btn btn--accent btn--sm" id="draftAiBtn">✨ Draft with AI</button>
-              <button class="btn btn--accent btn--sm" id="socialPostBtn">📱 Social Posts</button>
-            </div>
-          `}
-        </div>
+        ${renderContextualAiPanel(['blogDraft', 'blogFull', 'seo', 'schema', 'llmsTxt', 'socialPosts'])}
 
         <div class="form-divider"></div>
 
@@ -324,13 +307,8 @@ export function initBlog(rerender) {
     });
   }
 
-  // Upgrade CTA → navigate to AI tools page
-  const upgradeTierBtn = document.getElementById('upgradeTierBtn');
-  if (upgradeTierBtn) {
-    upgradeTierBtn.addEventListener('click', () => {
-      window.location.hash = '#/ai-tools';
-    });
-  }
+  // Contextual AI panel event wiring
+  initContextualAiPanel(rerender);
 
   // Character counters
   initCharCounter('postTitle', 'titleCounter', CHAR_LIMITS.postTitle);
