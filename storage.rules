@@ -3,19 +3,18 @@ service firebase.storage {
   match /b/{bucket}/o {
     
     // ─── Helper Functions ───────────────────────────────────────
+    // Uses custom claims set on the Auth token (no cross-service calls)
     
     function isAuthenticated() {
       return request.auth != null;
     }
     
     function isAdmin() {
-      return isAuthenticated() && 
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.role == 'admin';
+      return isAuthenticated() && request.auth.token.role == 'admin';
     }
     
     function ownsSite(siteId) {
-      return isAuthenticated() && 
-        firestore.get(/databases/(default)/documents/users/$(request.auth.uid)).data.siteId == siteId;
+      return isAuthenticated() && request.auth.token.siteId == siteId;
     }
     
     function canAccessSite(siteId) {
@@ -23,24 +22,18 @@ service firebase.storage {
     }
     
     // ─── Site Assets ────────────────────────────────────────────
-    // /sites/{siteId}/**
+    // Structured: /sites/{siteId}/{category}/{filename}
+    // Categories: images, blog, products, gallery, logos, etc.
     match /sites/{siteId}/{allPaths=**} {
       // Anyone can read (images are publicly visible on the website)
       allow read: if true;
       // Only site owner or admin can upload/delete
-      allow write: if canAccessSite(siteId);
-    }
-    
-    // ─── Upload Validation ──────────────────────────────────────
-    // Enforce file size and type constraints
-    match /sites/{siteId}/images/{imageId} {
-      allow read: if true;
       allow write: if canAccessSite(siteId)
         && request.resource.size < 10 * 1024 * 1024  // Max 10MB
         && request.resource.contentType.matches('image/.*');  // Images only
     }
     
-    // Block everything else
+    // ─── Block everything else ──────────────────────────────────
     match /{allPaths=**} {
       allow read, write: if false;
     }
