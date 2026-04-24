@@ -4,6 +4,7 @@ dist
 *.local
 .next
 .firebase
+.env*
 firebase-debug.log
 
 # Local Netlify folder
