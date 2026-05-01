@@ -30,7 +30,7 @@ import {
   where,
   increment,
 } from 'firebase/firestore';
-import { CHAR_LIMITS, BLOG_CATEGORY_PRESETS, PRODUCT_CATEGORY_PRESETS, MODULE_DEFINITIONS, TIER_CONFIG } from './constants.js';
+import { CHAR_LIMITS, BLOG_CATEGORY_PRESETS, PRODUCT_CATEGORY_PRESETS, MODULE_DEFINITIONS, MODULE_LIMITS, TIER_CONFIG, BLOCK_REGISTRY, BLOCK_LIMITS } from './constants.js';
 
 // Re-export constants for backward compatibility
 export { CHAR_LIMITS, BLOG_CATEGORY_PRESETS, PRODUCT_CATEGORY_PRESETS };
@@ -246,6 +246,21 @@ export const Store = {
     }
   },
 
+  /** Get the current site ID */
+  getSiteId() {
+    return _siteId;
+  },
+
+  /**
+   * Update the local credit count cache (called by ai-service after a successful action).
+   * This avoids a round-trip read from Firestore just to update the badge.
+   */
+  _updateCreditsCache(newRemaining) {
+    if (_siteConfig) {
+      _siteConfig.aiActionsRemaining = newRemaining;
+    }
+  },
+
   // ═════════════════════════════════════════════════════════════
   // SITE CONFIG & MODULE ACTIVATION
   // ═════════════════════════════════════════════════════════════
@@ -333,8 +348,61 @@ export const Store = {
     return _siteConfig?.aiActionsRemaining ?? tierCfg.aiActions;
   },
 
+  /**
+   * Get the quantity limit for a module on the current tier.
+   * Returns Infinity for unlimited, or a number.
+   */
+  getModuleLimit(moduleId) {
+    const tier = this.getTier();
+    const limits = MODULE_LIMITS[tier] || MODULE_LIMITS.free;
+    return limits[moduleId] ?? Infinity;
+  },
+
+  /**
+   * Check if the user can add another record to a module.
+   * Returns { allowed, current, limit, tierLabel, nextTier }
+   * Editors call this before showing the "Add New" form.
+   */
+  canAddToModule(moduleId) {
+    const tier = this.getTier();
+    const limits = MODULE_LIMITS[tier] || MODULE_LIMITS.free;
+    const limit = limits[moduleId] ?? Infinity;
+    const tierLabel = TIER_CONFIG[tier]?.label || 'Free';
+
+    // Count current records
+    let current = 0;
+    switch (moduleId) {
+      case 'blog':          current = (_cache.blogPosts || []).length; break;
+      case 'products':      current = (_cache.products || []).length; break;
+      case 'events':        current = (_cache.events || []).length; break;
+      case 'gallery':       current = (_cache.gallery || []).length; break;
+      case 'team':          current = (_cache.team || []).length; break;
+      case 'announcements': current = (_cache.announcements || []).length; break;
+      default:              current = 0;
+    }
+
+    // Determine next tier for upsell messaging
+    const tierOrder = ['free', 'pro', 'plus', 'business'];
+    const tierIdx = tierOrder.indexOf(tier);
+    const nextTierKey = tierIdx < tierOrder.length - 1 ? tierOrder[tierIdx + 1] : null;
+    const nextTier = nextTierKey ? {
+      key: nextTierKey,
+      label: TIER_CONFIG[nextTierKey]?.label || '',
+      price: TIER_CONFIG[nextTierKey]?.price || 0,
+      limit: (MODULE_LIMITS[nextTierKey] || {})[moduleId] ?? Infinity,
+    } : null;
+
+    return {
+      allowed: current < limit,
+      current,
+      limit,
+      tierLabel,
+      nextTier,
+    };
+  },
+
   // ═════════════════════════════════════════════════════════════
-  // PAGES
+  // PAGES (legacy + new block-based composer)
   // ═════════════════════════════════════════════════════════════
 
   getPages() { return _cache.pages; },
@@ -344,6 +412,198 @@ export const Store = {
     await this._setDoc('pages', _cache.pages);
     this._logActivity(`Updated ${key} section`, 'edit');
   },
+
+  // ── Block-Based Composer Methods ──────────────────────────────
+
+  /**
+   * Get the ordered array of blocks for the current page.
+   * On first call, auto-migrates legacy flat data → blocks array.
+   */
+  getPageBlocks() {
+    // If blocks already exist, return them
+    if (Array.isArray(_cache.pages?.blocks)) {
+      return [..._cache.pages.blocks].sort((a, b) => a.order - b.order);
+    }
+    // Migrate legacy flat pages structure → blocks array
+    return this._migrateLegacyPages();
+  },
+
+  /**
+   * Migrate legacy { hero: {...}, about: {...}, pastor: {...}, cta: {...} }
+   * into { blocks: [ { id, type, data, order } ] }
+   */
+  _migrateLegacyPages() {
+    const pages = _cache.pages || {};
+    const blocks = [];
+    const legacyMap = [
+      { key: 'hero', type: 'hero' },
+      { key: 'about', type: 'about' },
+      { key: 'pastor', type: 'leadership' },
+      { key: 'cta', type: 'cta' },
+    ];
+
+    legacyMap.forEach((mapping, idx) => {
+      const data = pages[mapping.key];
+      if (data && typeof data === 'object' && Object.keys(data).some(k => data[k])) {
+        blocks.push({
+          id: generateId('blk'),
+          type: mapping.type,
+          data: { ...data },
+          order: idx,
+          status: 'live',
+          createdAt: new Date().toISOString(),
+        });
+      }
+    });
+
+    // Store migrated blocks back (don't await — fire and forget for UX)
+    if (blocks.length > 0) {
+      _cache.pages = { ...pages, blocks };
+      this._setDoc('pages', _cache.pages);
+    } else {
+      _cache.pages = { ...pages, blocks: [] };
+    }
+
+    return blocks;
+  },
+
+  /**
+   * Check if the user can add another block to the page.
+   * Returns { allowed, current, limit, tierLabel, nextTier }
+   */
+  canAddPageBlock() {
+    const tier = this.getTier();
+    const limit = BLOCK_LIMITS[tier] ?? BLOCK_LIMITS.free;
+    const current = (this.getPageBlocks()).length;
+    const tierLabel = TIER_CONFIG[tier]?.label || 'Free';
+
+    const tierOrder = ['free', 'pro', 'plus', 'business'];
+    const tierIdx = tierOrder.indexOf(tier);
+    const nextTierKey = tierIdx < tierOrder.length - 1 ? tierOrder[tierIdx + 1] : null;
+    const nextTier = nextTierKey ? {
+      key: nextTierKey,
+      label: TIER_CONFIG[nextTierKey]?.label || '',
+      price: TIER_CONFIG[nextTierKey]?.price || 0,
+      limit: BLOCK_LIMITS[nextTierKey] ?? Infinity,
+    } : null;
+
+    return { allowed: current < limit, current, limit, tierLabel, nextTier };
+  },
+
+  /**
+   * Check if a specific block type is accessible.
+   * Returns { available, reason, blockDef }
+   *   reason: 'ok' | 'tier_locked' | 'module_inactive'
+   */
+  canUseBlockType(blockType) {
+    const blockDef = BLOCK_REGISTRY[blockType];
+    if (!blockDef) return { available: false, reason: 'unknown', blockDef: null };
+
+    // Premium tier check
+    if (blockDef.minTier) {
+      const tierOrder = ['free', 'pro', 'plus', 'business'];
+      const currentTierIdx = tierOrder.indexOf(this.getTier());
+      const requiredTierIdx = tierOrder.indexOf(blockDef.minTier);
+      if (currentTierIdx < requiredTierIdx) {
+        return { available: false, reason: 'tier_locked', blockDef, requiredTier: blockDef.minTier };
+      }
+    }
+
+    // Module activation check
+    if (blockDef.linkedModule && !this.isModuleActive(blockDef.linkedModule)) {
+      return { available: false, reason: 'module_inactive', blockDef, linkedModule: blockDef.linkedModule };
+    }
+
+    return { available: true, reason: 'ok', blockDef };
+  },
+
+  /**
+   * Add a new block to the page canvas.
+   */
+  async addPageBlock(blockType, position = null) {
+    const blocks = this.getPageBlocks();
+    const blockDef = BLOCK_REGISTRY[blockType];
+    if (!blockDef) throw new Error(`Unknown block type: ${blockType}`);
+
+    const newBlock = {
+      id: generateId('blk'),
+      type: blockType,
+      data: { ...blockDef.defaultData },
+      order: position !== null ? position : blocks.length,
+      status: 'live',
+      createdAt: new Date().toISOString(),
+    };
+
+    // If inserting at a position, shift subsequent blocks
+    if (position !== null) {
+      blocks.forEach(b => { if (b.order >= position) b.order++; });
+    }
+
+    blocks.push(newBlock);
+    _cache.pages = { ..._cache.pages, blocks };
+    await this._setDoc('pages', _cache.pages);
+    this._logActivity(`Added ${blockDef.label} block`, 'edit');
+    return newBlock;
+  },
+
+  /**
+   * Update the data of an existing block.
+   */
+  async updatePageBlock(blockId, updates) {
+    const blocks = this.getPageBlocks();
+    const idx = blocks.findIndex(b => b.id === blockId);
+    if (idx === -1) throw new Error(`Block not found: ${blockId}`);
+
+    blocks[idx] = {
+      ...blocks[idx],
+      data: { ...blocks[idx].data, ...updates },
+      updatedAt: new Date().toISOString(),
+    };
+
+    _cache.pages = { ..._cache.pages, blocks };
+    await this._setDoc('pages', _cache.pages);
+    this._logActivity(`Updated ${BLOCK_REGISTRY[blocks[idx].type]?.label || 'block'}`, 'edit');
+  },
+
+  /**
+   * Remove a block from the page.
+   */
+  async removePageBlock(blockId) {
+    let blocks = this.getPageBlocks();
+    const target = blocks.find(b => b.id === blockId);
+    if (!target) return;
+
+    blocks = blocks.filter(b => b.id !== blockId);
+    // Re-index orders
+    blocks.sort((a, b) => a.order - b.order).forEach((b, i) => b.order = i);
+
+    _cache.pages = { ..._cache.pages, blocks };
+    await this._setDoc('pages', _cache.pages);
+    this._logActivity(`Removed ${BLOCK_REGISTRY[target.type]?.label || 'block'}`, 'trash');
+  },
+
+  /**
+   * Move a block up or down.
+   * @param {string} blockId
+   * @param {'up'|'down'} direction
+   */
+  async reorderPageBlock(blockId, direction) {
+    const blocks = this.getPageBlocks();
+    const idx = blocks.findIndex(b => b.id === blockId);
+    if (idx === -1) return;
+
+    const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= blocks.length) return;
+
+    // Swap orders
+    const tmpOrder = blocks[idx].order;
+    blocks[idx].order = blocks[swapIdx].order;
+    blocks[swapIdx].order = tmpOrder;
+
+    _cache.pages = { ..._cache.pages, blocks };
+    await this._setDoc('pages', _cache.pages);
+  },
+
 
   // ═════════════════════════════════════════════════════════════
   // EVENTS

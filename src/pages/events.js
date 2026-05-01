@@ -3,18 +3,22 @@
  */
 
 import { Store } from '../store.js';
+import { TIER_CONFIG } from '../constants.js';
 import { showToast } from '../components/toast.js';
-import { openModal, closeModal, confirmModal } from '../components/modal.js';
+import { openModal, closeModal, confirmModal, showModal } from '../components/modal.js';
 
 export function renderEvents() {
   const events = Store.getEvents();
+
+  const cap = Store.canAddToModule('events');
+  const limitLabel = cap.limit === Infinity ? '' : ` <span class="text-dim">(${cap.current}/${cap.limit} on ${cap.tierLabel})</span>`;
 
   return `
     <div class="events-page">
       <div class="page-top">
         <div>
           <h2>Events</h2>
-          <p class="text-muted">Manage your upcoming events and gatherings.</p>
+          <p class="text-muted">Manage your upcoming events and gatherings.${limitLabel}</p>
         </div>
         <button class="btn btn--primary" id="addEventBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -124,6 +128,26 @@ export function initEvents(rerender) {
   const addBtn = document.getElementById('addEventBtn');
   if (addBtn) {
     addBtn.addEventListener('click', () => {
+      const cap = Store.canAddToModule('events');
+
+      if (!cap.allowed) {
+        showToast(`You've reached your ${cap.tierLabel} plan limit of ${cap.limit} event${cap.limit !== 1 ? 's' : ''}.`, 'error');
+        window.location.hash = '#/ai-tools';
+        return;
+      }
+
+      if (cap.limit !== Infinity && cap.current >= cap.limit - 1 && cap.nextTier) {
+        showModal({
+          title: '⚡ Almost at Your Limit',
+          message: `You're using ${cap.current}/${cap.limit} events on the ${cap.tierLabel} plan. Upgrade to ${cap.nextTier.label} ($${cap.nextTier.price}/mo) for ${cap.nextTier.limit === Infinity ? 'unlimited' : cap.nextTier.limit} events.`,
+          confirmText: `Upgrade to ${cap.nextTier.label}`,
+          confirmClass: 'btn--accent',
+          onConfirm: () => {
+            window.location.hash = '#/ai-tools';
+          }
+        });
+      }
+
       const modal = openModal({
         title: 'Add New Event',
         content: getEventFormHtml(),

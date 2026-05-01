@@ -116,25 +116,17 @@ export function renderSidebar(currentPage) {
             <ul class="sidebar__list sidebar__list--grow">
               ${inactiveModules.slice(0, 4).map(moduleId => {
                 const mod = MODULE_DEFINITIONS[moduleId];
-                const isLocked = mod?.requiredTier && (() => {
-                  const tierOrder = ['free', 'pro', 'business'];
-                  const currentTier = Store.getTier();
-                  return tierOrder.indexOf(currentTier) < tierOrder.indexOf(mod.requiredTier);
-                })();
+                // All modules are available on all tiers (gated by quantity limits, not access)
                 return `
                 <li>
                   <a href="#/${moduleId}" class="sidebar__link sidebar__link--grow" data-page="${moduleId}">
                     <span class="sidebar__link-icon">${NAV_ICONS[moduleId] || NAV_ICONS.pages}</span>
                     <span class="sidebar__link-label">${mod?.label || moduleId}</span>
-                    ${isLocked ? `
-                      <span class="sidebar__badge sidebar__badge--pro">PRO</span>
-                    ` : `
-                      <span class="sidebar__badge sidebar__badge--add">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12">
-                          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
-                        </svg>
-                      </span>
-                    `}
+                    <span class="sidebar__badge sidebar__badge--add">
+                      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="12">
+                        <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+                      </svg>
+                    </span>
                   </a>
                 </li>
               `}).join('')}

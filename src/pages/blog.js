@@ -3,13 +3,16 @@
  */
 
 import { Store, CHAR_LIMITS } from '../store.js';
+import { TIER_CONFIG } from '../constants.js';
 import { showToast } from '../components/toast.js';
 import { showModal, closeModal } from '../components/modal.js';
-import { renderContextualAiPanel, initContextualAiPanel } from '../components/contextual-ai-panel.js';
+import { renderContextualAiPanel, initContextualAiPanel, renderCreditsBanner } from '../components/contextual-ai-panel.js';
+import { createImageUploadWidget, initImageUploadWidget, setWidgetImage } from '../components/image-upload-widget.js';
 
 let currentView = 'list'; // 'list' | 'editor'
 let editingPostId = null;
 let currentFilter = 'all';
+let pendingFeaturedImage = null; // Holds the processed blob from the widget
 
 function getStatusBadge(status) {
   const map = {
@@ -82,11 +85,14 @@ function renderBlogList() {
       </div>
     `).join('');
 
+  const cap = Store.canAddToModule('blog');
+  const limitLabel = cap.limit === Infinity ? '' : ` · ${cap.current}/${cap.limit} on ${cap.tierLabel}`;
+
   return `
     <div class="page-header">
       <div class="page-header__left">
         <h2>Blog</h2>
-        <p class="page-header__subtitle">${stats.blogPostsPublished} published · ${stats.blogPostsDraft} drafts</p>
+        <p class="page-header__subtitle">${stats.blogPostsPublished} published · ${stats.blogPostsDraft} drafts${limitLabel}</p>
       </div>
       <button class="btn btn--primary" id="newPostBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -131,6 +137,8 @@ function renderPostEditor(post = null) {
 
       <h2 class="editor-page__title">${isNew ? '📝 New Blog Post' : '✏️ Edit Post'}</h2>
 
+      ${renderContextualAiPanel(['blogDraft', 'blogFull', 'seo', 'schema', 'llmsTxt', 'socialPosts'])}
+
       <div class="editor-form">
         <div class="form-group">
           <label class="form-label">Title <span class="required">*</span></label>
@@ -150,16 +158,7 @@ function renderPostEditor(post = null) {
           <p class="form-hint">Appears in post cards, search results, and social previews.</p>
         </div>
 
-        <div class="form-group">
-          <label class="form-label">Featured Image <span class="required">*</span></label>
-          <div class="image-upload" id="featuredImageUpload">
-            <div class="image-upload__dropzone">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-              <p>Drop image here or <strong>click to upload</strong></p>
-              <span class="image-upload__hint">Min 800px wide · ~1.9:1 aspect · JPG, PNG, WebP · Max 10MB</span>
-            </div>
-          </div>
-        </div>
+        ${createImageUploadWidget({ id: 'blogFeatured', slot: 'blogFeatured', currentUrl: post?.featuredImage || '', label: 'Featured Image', required: true })}
 
         <div class="form-row">
           <div class="form-group form-group--half">
@@ -197,8 +196,6 @@ function renderPostEditor(post = null) {
           </div>
           <p class="form-hint" id="wordCount">${post?.wordCount || 0} words</p>
         </div>
-
-        ${renderContextualAiPanel(['blogDraft', 'blogFull', 'seo', 'schema', 'llmsTxt', 'socialPosts'])}
 
         <div class="form-divider"></div>
 
@@ -263,6 +260,29 @@ export function initBlog(rerender) {
   const newPostBtn = document.getElementById('newPostBtn');
   if (newPostBtn) {
     newPostBtn.addEventListener('click', () => {
+      const cap = Store.canAddToModule('blog');
+
+      // Hard block — at capacity → send to upgrade page
+      if (!cap.allowed) {
+        showToast(`You've reached your ${cap.tierLabel} plan limit of ${cap.limit} blog posts.`, 'error');
+        window.location.hash = '#/ai-tools';
+        return;
+      }
+
+      // Soft nudge — approaching limit (last slot)
+      if (cap.limit !== Infinity && cap.current >= cap.limit - 1 && cap.nextTier) {
+        showModal({
+          title: '⚡ Almost at Your Limit',
+          message: `You're using ${cap.current}/${cap.limit} blog posts on the ${cap.tierLabel} plan. Upgrade to ${cap.nextTier.label} ($${cap.nextTier.price}/mo) for ${cap.nextTier.limit === Infinity ? 'unlimited' : cap.nextTier.limit} posts.`,
+          confirmText: `Upgrade to ${cap.nextTier.label}`,
+          confirmClass: 'btn--accent',
+          onConfirm: () => {
+            window.location.hash = '#/ai-tools';
+          }
+        });
+        // Still allow them to proceed — they can dismiss the modal
+      }
+
       editingPostId = null;
       currentView = 'editor';
       rerender();
@@ -307,8 +327,67 @@ export function initBlog(rerender) {
     });
   }
 
-  // Contextual AI panel event wiring
-  initContextualAiPanel(rerender);
+  // ── Featured Image Widget ─────────────────────────────────────
+  pendingFeaturedImage = null;
+  initImageUploadWidget('blogFeatured', {
+    onComplete: (result) => {
+      pendingFeaturedImage = result;
+    },
+    onRemove: () => {
+      pendingFeaturedImage = null;
+    },
+    onError: (err) => {
+      showToast(err.message, 'error');
+    },
+  });
+  // If editing an existing post, load its featured image into the widget
+  if (editingPostId) {
+    const post = Store.getBlogPost(editingPostId);
+    if (post?.featuredImage) {
+      setWidgetImage('blogFeatured', post.featuredImage);
+    }
+  }
+
+  // Contextual AI panel event wiring — with blog-specific context + result injection
+  initContextualAiPanel(rerender, {
+    contextGatherer: () => ({
+      title:    document.getElementById('postTitle')?.value?.trim() || '',
+      excerpt:  document.getElementById('postExcerpt')?.value?.trim() || '',
+      body:     document.getElementById('postBody')?.value?.trim() || '',
+      category: document.getElementById('postCategory')?.value || '',
+      author:   document.getElementById('postAuthor')?.value || '',
+    }),
+    resultHandler: (actionKey, result) => {
+      // For blog draft / full blog — inject directly into editor fields
+      if (actionKey === 'blogDraft' || actionKey === 'blogFull') {
+        if (result.title) {
+          const el = document.getElementById('postTitle');
+          if (el) { el.value = result.title; el.dispatchEvent(new Event('input')); }
+        }
+        if (result.excerpt) {
+          const el = document.getElementById('postExcerpt');
+          if (el) { el.value = result.excerpt; el.dispatchEvent(new Event('input')); }
+        }
+        if (result.body) {
+          const el = document.getElementById('postBody');
+          if (el) { el.value = result.body; el.dispatchEvent(new Event('input')); }
+        }
+        // Still show the modal so they can see SEO / schema / llmsTxt if present
+        return false;
+      }
+      // For SEO — inject the meta description into the excerpt if it's empty
+      if (actionKey === 'seo' && result.metaDescription) {
+        const excerptEl = document.getElementById('postExcerpt');
+        if (excerptEl && !excerptEl.value.trim()) {
+          excerptEl.value = result.metaDescription;
+          excerptEl.dispatchEvent(new Event('input'));
+        }
+        return false; // also show the modal
+      }
+      // Everything else (schema, llmsTxt, socialPosts, keywords) → show modal
+      return false;
+    },
+  });
 
   // Character counters
   initCharCounter('postTitle', 'titleCounter', CHAR_LIMITS.postTitle);

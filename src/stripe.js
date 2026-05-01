@@ -59,12 +59,13 @@ async function callFunction(endpoint, body) {
 /**
  * Start a Stripe Checkout session and redirect the user.
  * 
- * @param {'subscription'|'oneTime'|'imageGen'} sessionType
+ * @param {'subscription'|'oneTime'|'creditPack'|'imageGen'} sessionType
  * @param {Object} params - Session-specific parameters
  * @param {string} params.plan       - 'pro'|'business' (for subscription)
  * @param {string} params.actionKey  - e.g. 'seo', 'blogDraft' (for oneTime)
  * @param {string} params.actionLabel - Human label for the action
- * @param {number} params.price      - Dollar amount (for oneTime/imageGen)
+ * @param {number} params.price      - Dollar amount (for oneTime/imageGen/creditPack)
+ * @param {number} params.credits    - Number of credits (for creditPack)
  * @param {string} params.model      - Image model key (for imageGen)
  */
 export async function startCheckout(sessionType, params = {}) {

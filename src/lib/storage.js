@@ -5,6 +5,11 @@
  * Handles all file upload/download operations for site assets.
  * Files are organized under: /sites/{siteId}/{category}/{filename}
  * 
+ * All image uploads pass through the ImageProcessor pipeline
+ * ("The Automatic Tailor") which auto-crops, resizes, compresses,
+ * and converts to WebP before upload. Clients upload any image;
+ * the system ensures it fits the design perfectly.
+ * 
  * Categories:
  *   - images/blog      → Blog post featured images
  *   - images/products   → Product photos
@@ -24,6 +29,7 @@ import {
   getMetadata,
 } from 'firebase/storage';
 import { Store } from '../store.js';
+import { ImageProcessor } from './image-processor.js';
 
 // ─── Constants ──────────────────────────────────────────────────
 
@@ -269,40 +275,118 @@ export const StorageService = {
     return getMetadata(fileRef);
   },
 
+  // ═════════════════════════════════════════════════════════════
+  // AUTO-PROCESSED UPLOADS ("The Automatic Tailor")
+  // These methods process images through the pipeline before upload.
+  // Client uploads any image → auto-crop → resize → WebP → compress → upload.
+  // ═════════════════════════════════════════════════════════════
+
   /**
-   * Convenience: Upload a blog post featured image.
-   * Returns { url, path } ready to store in the blog post document.
+   * Process an image through the Automatic Tailor pipeline, then upload.
+   * This is the preferred method for all image uploads.
+   * 
+   * @param {File}     file       - Raw file from <input type="file">
+   * @param {string}   slotName   - Image slot (e.g. 'teamMember', 'blogFeatured')
+   * @param {string}   category   - Storage category (e.g. CATEGORIES.TEAM)
+   * @param {Object}   [options]
+   * @param {Function} [options.onProgress]   - Upload progress: (percent) => void
+   * @param {Function} [options.onStep]       - Processing step: (step, detail) => void
+   * @param {boolean}  [options.skipProcessing] - Skip the pipeline (for pre-processed files)
+   * @param {Object}   [options.metadata]     - Custom metadata
+   * 
+   * @returns {Promise<{ url, path, filename, metadata, processing }>}
    */
-  async uploadBlogImage(file, onProgress) {
-    return this.upload(file, CATEGORIES.BLOG, { onProgress });
+  async processAndUpload(file, slotName, category, options = {}) {
+    let uploadFile = file;
+    let processingResult = null;
+
+    // Process through the Automatic Tailor (unless explicitly skipped)
+    if (!options.skipProcessing && ImageProcessor.getSlotConfig(slotName)) {
+      const processed = await ImageProcessor.processToFile(file, slotName, {
+        onStep: options.onStep,
+      });
+      uploadFile = processed.file;
+      processingResult = {
+        originalSize: processed.originalSize,
+        processedSize: processed.processedSize,
+        compressionRatio: processed.compressionRatio,
+        dimensions: `${processed.width}×${processed.height}`,
+        previewUrl: processed.previewUrl,
+      };
+    }
+
+    // Upload the processed file
+    const result = await this.upload(uploadFile, category, {
+      onProgress: options.onProgress,
+      metadata: {
+        ...(options.metadata || {}),
+        processedSlot: slotName,
+        originalName: file.name,
+        processedDimensions: processingResult?.dimensions || 'unprocessed',
+      },
+    });
+
+    return {
+      ...result,
+      processing: processingResult,
+    };
   },
 
   /**
-   * Convenience: Upload a product image.
+   * Upload a blog post featured image.
+   * Auto-processes: 1200×630px, 1.9:1 aspect, WebP, ~200KB.
    */
-  async uploadProductImage(file, onProgress) {
-    return this.upload(file, CATEGORIES.PRODUCTS, { onProgress });
+  async uploadBlogImage(file, onProgress, onStep) {
+    return this.processAndUpload(file, 'blogFeatured', CATEGORIES.BLOG, { onProgress, onStep });
   },
 
   /**
-   * Convenience: Upload a gallery photo.
+   * Upload a product image.
+   * Auto-processes: 800×800px, 1:1 aspect, WebP, ~150KB.
    */
-  async uploadGalleryPhoto(file, onProgress) {
-    return this.upload(file, CATEGORIES.GALLERY, { onProgress });
+  async uploadProductImage(file, onProgress, onStep) {
+    return this.processAndUpload(file, 'productImage', CATEGORIES.PRODUCTS, { onProgress, onStep });
   },
 
   /**
-   * Convenience: Upload a team member headshot.
+   * Upload a gallery photo.
+   * Auto-processes: up to 1200×1600px, preserves aspect, WebP, ~250KB.
    */
-  async uploadTeamPhoto(file, onProgress) {
-    return this.upload(file, CATEGORIES.TEAM, { onProgress });
+  async uploadGalleryPhoto(file, onProgress, onStep) {
+    return this.processAndUpload(file, 'galleryPhoto', CATEGORIES.GALLERY, { onProgress, onStep });
   },
 
   /**
-   * Convenience: Upload a general site image (logo, hero, etc.)
+   * Upload a team member headshot.
+   * Auto-processes: 400×400px, 1:1 square crop, WebP, ~100KB.
    */
-  async uploadSiteImage(file, onProgress) {
-    return this.upload(file, CATEGORIES.SITE, { onProgress });
+  async uploadTeamPhoto(file, onProgress, onStep) {
+    return this.processAndUpload(file, 'teamMember', CATEGORIES.TEAM, { onProgress, onStep });
+  },
+
+  /**
+   * Upload a general site image (logo, hero, etc.).
+   * Auto-processes: 1920×1080px, 16:9 aspect, WebP, ~300KB.
+   */
+  async uploadSiteImage(file, onProgress, onStep) {
+    return this.processAndUpload(file, 'heroBanner', CATEGORIES.SITE, { onProgress, onStep });
+  },
+
+  /**
+   * Upload a raw file WITHOUT auto-processing (e.g. documents, SVGs).
+   * Use this for non-image files or when you've already processed the image.
+   */
+  async uploadRaw(file, category, onProgress) {
+    return this.upload(file, category, { onProgress });
+  },
+
+  /**
+   * Get human-readable requirements for a slot.
+   * Pass-through to ImageProcessor for UI labels.
+   * @param {string} slotName 
+   */
+  getImageRequirements(slotName) {
+    return ImageProcessor.getSlotRequirements(slotName);
   },
 
   /**

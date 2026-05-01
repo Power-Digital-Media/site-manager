@@ -3,8 +3,10 @@
  */
 
 import { Store, CHAR_LIMITS } from '../store.js';
+import { TIER_CONFIG, MODULE_LIMITS } from '../constants.js';
 import { showToast } from '../components/toast.js';
 import { showModal, closeModal } from '../components/modal.js';
+import { createImageUploadWidget, initImageUploadWidget } from '../components/image-upload-widget.js';
 
 let currentView = 'albums'; // 'albums' | 'album-detail' | 'new-album'
 let selectedAlbumId = null;
@@ -130,10 +132,8 @@ function renderAlbumDetail(album) {
             </div>
           `).join('')}
 
-          <div class="photo-grid__add" id="addPhotoSlot">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            <span>Add Photo</span>
-            <span class="image-upload__hint">JPG, PNG, WebP · Max 10MB</span>
+          <div class="photo-grid__add-widget">
+            ${createImageUploadWidget({ id: 'galleryPhoto', slot: 'galleryPhoto', label: 'Add Photo', required: false, compact: true })}
           </div>
         </div>
       </div>
@@ -303,13 +303,23 @@ export function initGallery(rerender) {
     });
   });
 
-  // Add photo (stub for now — will wire to Firebase Storage later)
-  const addPhotoSlot = document.getElementById('addPhotoSlot');
-  if (addPhotoSlot && selectedAlbumId) {
-    addPhotoSlot.addEventListener('click', () => {
-      Store.addPhotoToAlbum(selectedAlbumId, { url: null, caption: '', altText: '' });
-      showToast('Photo placeholder added', 'success');
-      rerender();
+  // ── Gallery Photo Upload Widget ─────────────────────────────
+  if (selectedAlbumId) {
+    initImageUploadWidget('galleryPhoto', {
+      onComplete: (result) => {
+        Store.addPhotoToAlbum(selectedAlbumId, {
+          url: result.previewUrl,
+          caption: '',
+          altText: '',
+          width: result.width,
+          height: result.height,
+        });
+        showToast('Photo added! 📸', 'success');
+        rerender();
+      },
+      onError: (err) => {
+        showToast(err.message, 'error');
+      },
     });
   }
 

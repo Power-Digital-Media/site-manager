@@ -5,47 +5,27 @@
 import { Store } from '../store.js';
 import { TIER_CONFIG } from '../constants.js';
 import { showToast } from '../components/toast.js';
-import { openModal, closeModal, confirmModal } from '../components/modal.js';
-
-const FREE_TEAM_LIMIT = 3;
+import { openModal, closeModal, confirmModal, showModal } from '../components/modal.js';
+import { createImageUploadWidget, initImageUploadWidget, setWidgetImage } from '../components/image-upload-widget.js';
+let pendingHeadshot = null; // Holds the processed blob from the widget
 
 export function renderTeam() {
   const team = Store.getTeam();
-  const tier = Store.getTier();
-  const isFreeTier = tier === 'free';
-  const atLimit = isFreeTier && team.length >= FREE_TEAM_LIMIT;
+  const cap = Store.canAddToModule('team');
+  const limitLabel = cap.limit === Infinity ? '' : ` <span class="text-dim">(${cap.current}/${cap.limit} on ${cap.tierLabel} plan)</span>`;
 
   return `
     <div class="team-page">
       <div class="page-top">
         <div>
           <h2>Team Members</h2>
-          <p class="text-muted">Manage your staff, pastors, and ministry leaders.${isFreeTier ? ` <span class="text-dim">(${team.length}/${FREE_TEAM_LIMIT} on Free plan)</span>` : ''}</p>
+          <p class="text-muted">Manage your staff, pastors, and ministry leaders.${limitLabel}</p>
         </div>
-        ${atLimit ? `
-          <a href="#/ai-tools" class="btn btn--accent" id="teamUpgradeBtn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-            Upgrade for Unlimited
-          </a>
-        ` : `
-          <button class="btn btn--primary" id="addTeamBtn">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-            Add Team Member
-          </button>
-        `}
+        <button class="btn btn--primary" id="addTeamBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          Add Team Member
+        </button>
       </div>
-
-      ${atLimit ? `
-        <div class="team-limit-banner">
-          <div class="team-limit-banner__icon">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="20"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-          </div>
-          <div class="team-limit-banner__text">
-            <strong>Team member limit reached</strong>
-            <span>Upgrade to ${TIER_CONFIG.pro.label} to add unlimited team members — $${TIER_CONFIG.pro.price}/mo</span>
-          </div>
-        </div>
-      ` : ''}
 
       <div class="team-grid" id="teamGrid">
         ${team.length ? team.map(m => renderTeamCard(m)).join('') : `
@@ -100,6 +80,7 @@ function getTeamFormHtml(member = null) {
         <label class="form-label">Title / Role</label>
         <input type="text" class="form-input" name="title" value="${member?.title || ''}" placeholder="e.g., Lead Pastor" required />
       </div>
+      ${createImageUploadWidget({ id: 'teamHeadshot', slot: 'teamMember', currentUrl: member?.photo || '', label: 'Headshot', required: false, compact: true })}
       <div class="form-group">
         <label class="form-label">Bio</label>
         <textarea class="form-input form-textarea" name="bio" rows="3" placeholder="A short bio about this person">${member?.bio || ''}</textarea>
@@ -108,10 +89,51 @@ function getTeamFormHtml(member = null) {
   `;
 }
 
+function initTeamHeadshotWidget(existingPhotoUrl = null) {
+  pendingHeadshot = null;
+  initImageUploadWidget('teamHeadshot', {
+    onComplete: (result) => {
+      pendingHeadshot = result;
+    },
+    onRemove: () => {
+      pendingHeadshot = null;
+    },
+    onError: (err) => {
+      showToast(err.message, 'error');
+    },
+  });
+  if (existingPhotoUrl) {
+    setWidgetImage('teamHeadshot', existingPhotoUrl);
+  }
+}
+
 export function initTeam(rerender) {
   const addBtn = document.getElementById('addTeamBtn');
   if (addBtn) {
     addBtn.addEventListener('click', () => {
+      const cap = Store.canAddToModule('team');
+
+      // Hard block — at capacity → send to upgrade page
+      if (!cap.allowed) {
+        showToast(`You've reached your ${cap.tierLabel} plan limit of ${cap.limit} team members.`, 'error');
+        window.location.hash = '#/ai-tools';
+        return;
+      }
+
+      // Soft nudge — approaching limit (last slot)
+      if (cap.limit !== Infinity && cap.current >= cap.limit - 1 && cap.nextTier) {
+        showModal({
+          title: '⚡ Almost at Your Limit',
+          message: `You're using ${cap.current}/${cap.limit} team members on the ${cap.tierLabel} plan. Upgrade to ${cap.nextTier.label} ($${cap.nextTier.price}/mo) for ${cap.nextTier.limit === Infinity ? 'unlimited' : cap.nextTier.limit} team members.`,
+          confirmText: `Upgrade to ${cap.nextTier.label}`,
+          confirmClass: 'btn--accent',
+          onConfirm: () => {
+            window.location.hash = '#/ai-tools';
+          }
+        });
+        // Still allow them to proceed — they can dismiss the modal
+      }
+
       const modal = openModal({
         title: 'Add Team Member',
         content: getTeamFormHtml(),
@@ -120,6 +142,8 @@ export function initTeam(rerender) {
           <button class="btn btn--primary" id="modal-save">Add Member</button>
         `,
       });
+      // Wire headshot widget after modal DOM is ready
+      initTeamHeadshotWidget();
       modal.querySelector('#modal-cancel').addEventListener('click', closeModal);
       modal.querySelector('#modal-save').addEventListener('click', () => {
         const form = modal.querySelector('#teamForm');
@@ -129,7 +153,7 @@ export function initTeam(rerender) {
           name: fd.get('name'),
           title: fd.get('title'),
           bio: fd.get('bio'),
-          photo: null,
+          photo: pendingHeadshot?.previewUrl || null,
         });
         closeModal();
         showToast('Team member added!', 'success');
@@ -151,6 +175,8 @@ export function initTeam(rerender) {
           <button class="btn btn--primary" id="modal-save">Save Changes</button>
         `,
       });
+      // Wire headshot widget after modal DOM is ready, with existing photo
+      initTeamHeadshotWidget(member.photo || null);
       modal.querySelector('#modal-cancel').addEventListener('click', closeModal);
       modal.querySelector('#modal-save').addEventListener('click', () => {
         const form = modal.querySelector('#teamForm');
@@ -159,6 +185,7 @@ export function initTeam(rerender) {
           name: fd.get('name'),
           title: fd.get('title'),
           bio: fd.get('bio'),
+          photo: pendingHeadshot?.previewUrl || member.photo || null,
         });
         closeModal();
         showToast('Team member updated!', 'success');

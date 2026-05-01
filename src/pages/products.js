@@ -3,13 +3,16 @@
  */
 
 import { Store, CHAR_LIMITS } from '../store.js';
+import { TIER_CONFIG } from '../constants.js';
 import { showToast } from '../components/toast.js';
 import { showModal, closeModal } from '../components/modal.js';
 import { renderContextualAiPanel, initContextualAiPanel } from '../components/contextual-ai-panel.js';
+import { createImageUploadWidget, initImageUploadWidget, setWidgetImage } from '../components/image-upload-widget.js';
 
 let currentView = 'list';
 let editingProductId = null;
 let currentFilter = 'all';
+let pendingProductImage = null; // Holds the processed blob from the widget
 
 function formatPrice(price) {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(price);
@@ -71,11 +74,14 @@ function renderProductList() {
       </div>
     `).join('');
 
+  const cap = Store.canAddToModule('products');
+  const limitLabel = cap.limit === Infinity ? '' : ` · ${cap.current}/${cap.limit} on ${cap.tierLabel}`;
+
   return `
     <div class="page-header">
       <div class="page-header__left">
         <h2>Products</h2>
-        <p class="page-header__subtitle">${stats.products} products · ${stats.productsInStock} in stock</p>
+        <p class="page-header__subtitle">${stats.products} products · ${stats.productsInStock} in stock${limitLabel}</p>
       </div>
       <button class="btn btn--primary" id="newProductBtn">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -146,16 +152,7 @@ function renderProductEditor(product = null) {
           </div>
         </div>
 
-        <div class="form-group">
-          <label class="form-label">Product Images (up to 5)</label>
-          <div class="image-upload-grid">
-            <div class="image-upload-slot image-upload-slot--add">
-              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
-              <span>Add Image</span>
-              <span class="image-upload__hint">Min 400px · 1:1 square</span>
-            </div>
-          </div>
-        </div>
+        ${createImageUploadWidget({ id: 'productImage', slot: 'productImage', currentUrl: product?.images?.[0] || '', label: 'Product Image', required: false })}
 
         <div class="form-row">
           <div class="form-group form-group--half">
@@ -223,6 +220,26 @@ export function initProducts(rerender) {
   const newBtn = document.getElementById('newProductBtn');
   if (newBtn) {
     newBtn.addEventListener('click', () => {
+      const cap = Store.canAddToModule('products');
+
+      if (!cap.allowed) {
+        showToast(`You've reached your ${cap.tierLabel} plan limit of ${cap.limit} products.`, 'error');
+        window.location.hash = '#/ai-tools';
+        return;
+      }
+
+      if (cap.limit !== Infinity && cap.current >= cap.limit - 1 && cap.nextTier) {
+        showModal({
+          title: '⚡ Almost at Your Limit',
+          message: `You're using ${cap.current}/${cap.limit} products on the ${cap.tierLabel} plan. Upgrade to ${cap.nextTier.label} ($${cap.nextTier.price}/mo) for ${cap.nextTier.limit === Infinity ? 'unlimited' : cap.nextTier.limit} products.`,
+          confirmText: `Upgrade to ${cap.nextTier.label}`,
+          confirmClass: 'btn--accent',
+          onConfirm: () => {
+            window.location.hash = '#/ai-tools';
+          }
+        });
+      }
+
       editingProductId = null;
       currentView = 'editor';
       rerender();
@@ -267,6 +284,27 @@ export function initProducts(rerender) {
     });
   }
 
+  // ── Product Image Widget ──────────────────────────────────────
+  pendingProductImage = null;
+  initImageUploadWidget('productImage', {
+    onComplete: (result) => {
+      pendingProductImage = result;
+    },
+    onRemove: () => {
+      pendingProductImage = null;
+    },
+    onError: (err) => {
+      showToast(err.message, 'error');
+    },
+  });
+  // If editing an existing product, load its image into the widget
+  if (editingProductId) {
+    const product = Store.getProduct(editingProductId);
+    if (product?.images?.[0]) {
+      setWidgetImage('productImage', product.images[0]);
+    }
+  }
+
   // Char counters
   initCharCounter('productName', 'prodNameCounter', CHAR_LIMITS.productName);
   initCharCounter('productDesc', 'prodDescCounter', CHAR_LIMITS.productDescription);
@@ -305,8 +343,29 @@ export function initProducts(rerender) {
   if (saveBtn) saveBtn.addEventListener('click', saveProduct);
   if (publishBtn) publishBtn.addEventListener('click', saveProduct);
 
-  // Contextual AI panel event wiring
-  initContextualAiPanel(rerender);
+  // Contextual AI panel event wiring — with product-specific context + result injection
+  initContextualAiPanel(rerender, {
+    contextGatherer: () => ({
+      productName:  document.getElementById('productName')?.value?.trim() || '',
+      description:  document.getElementById('productDesc')?.value?.trim() || '',
+      price:        document.getElementById('productPrice')?.value || '',
+      category:     document.getElementById('productCategory')?.value || '',
+      availability: document.getElementById('productAvailability')?.value || '',
+    }),
+    resultHandler: (actionKey, result) => {
+      // For product description — inject directly into the description field
+      if (actionKey === 'productDesc' && result.description) {
+        const el = document.getElementById('productDesc');
+        if (el) {
+          el.value = result.description;
+          el.dispatchEvent(new Event('input'));
+        }
+        return false; // also show modal so user can review / copy
+      }
+      // Everything else (seo, schema) → show modal
+      return false;
+    },
+  });
 
   // Delete from editor
   const deleteBtn = document.getElementById('deleteProductEditorBtn');

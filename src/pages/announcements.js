@@ -3,18 +3,21 @@
  */
 
 import { Store } from '../store.js';
+import { TIER_CONFIG } from '../constants.js';
 import { showToast } from '../components/toast.js';
-import { openModal, closeModal, confirmModal } from '../components/modal.js';
+import { openModal, closeModal, confirmModal, showModal } from '../components/modal.js';
 
 export function renderAnnouncements() {
   const announcements = Store.getAnnouncements();
+  const cap = Store.canAddToModule('announcements');
+  const limitLabel = cap.limit === Infinity ? '' : ` <span class="text-dim">(${cap.current}/${cap.limit} on ${cap.tierLabel} plan)</span>`;
 
   return `
     <div class="announcements-page">
       <div class="page-top">
         <div>
           <h2>Announcements</h2>
-          <p class="text-muted">Manage promotional banners and important notices for your visitors.</p>
+          <p class="text-muted">Manage promotional banners and important notices for your visitors.${limitLabel}</p>
         </div>
         <button class="btn btn--primary" id="addAnnBtn">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
@@ -121,6 +124,29 @@ export function initAnnouncements(rerender) {
   const addBtn = document.getElementById('addAnnBtn');
   if (addBtn) {
     addBtn.addEventListener('click', () => {
+      const cap = Store.canAddToModule('announcements');
+
+      // Hard block — at capacity → send to upgrade page
+      if (!cap.allowed) {
+        showToast(`You've reached your ${cap.tierLabel} plan limit of ${cap.limit} announcement${cap.limit === 1 ? '' : 's'}.`, 'error');
+        window.location.hash = '#/ai-tools';
+        return;
+      }
+
+      // Soft nudge — approaching limit (last slot)
+      if (cap.limit !== Infinity && cap.current >= cap.limit - 1 && cap.nextTier) {
+        showModal({
+          title: '⚡ Almost at Your Limit',
+          message: `You're using ${cap.current}/${cap.limit} announcement${cap.limit === 1 ? '' : 's'} on the ${cap.tierLabel} plan. Upgrade to ${cap.nextTier.label} ($${cap.nextTier.price}/mo) for ${cap.nextTier.limit === Infinity ? 'unlimited' : cap.nextTier.limit} announcements.`,
+          confirmText: `Upgrade to ${cap.nextTier.label}`,
+          confirmClass: 'btn--accent',
+          onConfirm: () => {
+            window.location.hash = '#/ai-tools';
+          }
+        });
+        // Still allow them to proceed — they can dismiss the modal
+      }
+
       const modal = openModal({
         title: 'New Announcement',
         content: getAnnFormHtml(),

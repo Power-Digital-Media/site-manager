@@ -56,11 +56,11 @@ export function closeModal() {
     overlay.classList.remove('modal-overlay--show');
     overlay.classList.add('modal-overlay--hide');
     document.removeEventListener('keydown', handleEscape);
+    const dyingOverlay = overlay;
+    // Null the reference immediately so re-entrant calls don't double-fire
+    overlay = null;
     setTimeout(() => {
-      if (overlay) {
-        overlay.classList.remove('modal-overlay--hide');
-        overlay.innerHTML = '';
-      }
+      dyingOverlay.remove();          // remove from DOM entirely
     }, 300);
   }
 }

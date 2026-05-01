@@ -72,6 +72,9 @@ export const PRODUCT_CATEGORY_PRESETS = {
 // ─── Module Definitions ─────────────────────────────────────────
 // Defines all available modules, their display info, and whether
 // they are "always on" or can be toggled by admin/client.
+// NOTE: Modules are NO LONGER tier-gated. All modules are available
+// on all tiers. Access is controlled by QUANTITY LIMITS per tier
+// (see MODULE_LIMITS below). Pages editing is admin-only.
 export const MODULE_DEFINITIONS = {
   pages: {
     id: 'pages',
@@ -80,6 +83,7 @@ export const MODULE_DEFINITIONS = {
     icon: 'document',
     alwaysActive: true, // Every site has pages
     category: 'core',
+    adminOnly: true,    // Only PDM admin can edit designed pages
   },
   settings: {
     id: 'settings',
@@ -96,7 +100,6 @@ export const MODULE_DEFINITIONS = {
     icon: 'blog',
     alwaysActive: false,
     category: 'content',
-    requiredTier: 'pro',
   },
   products: {
     id: 'products',
@@ -105,7 +108,6 @@ export const MODULE_DEFINITIONS = {
     icon: 'product',
     alwaysActive: false,
     category: 'content',
-    requiredTier: 'pro',
   },
   events: {
     id: 'events',
@@ -114,7 +116,6 @@ export const MODULE_DEFINITIONS = {
     icon: 'calendar',
     alwaysActive: false,
     category: 'content',
-    requiredTier: 'pro',
   },
   gallery: {
     id: 'gallery',
@@ -123,7 +124,6 @@ export const MODULE_DEFINITIONS = {
     icon: 'gallery',
     alwaysActive: false,
     category: 'content',
-    requiredTier: 'pro',
   },
   announcements: {
     id: 'announcements',
@@ -132,7 +132,6 @@ export const MODULE_DEFINITIONS = {
     icon: 'megaphone',
     alwaysActive: false,
     category: 'content',
-    requiredTier: 'pro',
   },
   team: {
     id: 'team',
@@ -141,7 +140,6 @@ export const MODULE_DEFINITIONS = {
     icon: 'team',
     alwaysActive: false,
     category: 'content',
-    requiredTier: 'pro', // Requires Pro or Business tier
   },
   submissions: {
     id: 'submissions',
@@ -150,6 +148,57 @@ export const MODULE_DEFINITIONS = {
     icon: 'mail',
     alwaysActive: false,
     category: 'engagement',
+  },
+};
+
+// ─── Module Quantity Limits Per Tier ─────────────────────────────
+// Controls how many records a client can create in each module.
+// Infinity = unlimited. These limits are enforced in the Store
+// before allowing new record creation.
+//
+// Strategy: "Soft Limits" — every tier can access every module.
+// Free gets a taste, paid gets capacity. This builds stickiness
+// and creates natural upsell friction ("I need a 4th product").
+export const MODULE_LIMITS = {
+  free: {
+    blog: 3,
+    products: 3,
+    events: 1,
+    gallery: 1,           // 1 album
+    galleryPhotos: 5,     // 5 photos total
+    team: 3,
+    announcements: 1,     // 1 active announcement
+    publishMode: 'approval', // requires PDM admin approval
+  },
+  pro: {
+    blog: Infinity,
+    products: 25,
+    events: 10,
+    gallery: 5,
+    galleryPhotos: 30,
+    team: 10,
+    announcements: 3,
+    publishMode: 'self',  // self-publish
+  },
+  plus: {
+    blog: Infinity,
+    products: 100,
+    events: Infinity,
+    gallery: Infinity,
+    galleryPhotos: 100,
+    team: Infinity,
+    announcements: Infinity,
+    publishMode: 'self',
+  },
+  business: {
+    blog: Infinity,
+    products: Infinity,
+    events: Infinity,
+    gallery: Infinity,
+    galleryPhotos: Infinity,
+    team: Infinity,
+    announcements: Infinity,
+    publishMode: 'self',
   },
 };
 
@@ -164,6 +213,8 @@ export const ADMIN_EMAILS = [
 // ─── Image Slot Requirements ────────────────────────────────────
 export const IMAGE_SLOTS = {
   heroBanner: { width: 1920, height: 1080, minWidth: 1200, aspect: '16:9', maxSize: 10 * 1024 * 1024 },
+  imageBanner: { width: 1920, height: 800, minWidth: 1200, aspect: '12:5', maxSize: 10 * 1024 * 1024 },
+  aboutImage: { width: 800, height: 600, minWidth: 600, aspect: '4:3', maxSize: 10 * 1024 * 1024 },
   blogFeatured: { width: 1200, height: 630, minWidth: 800, aspect: '1.9:1', maxSize: 10 * 1024 * 1024 },
   galleryPhoto: { width: 1200, height: null, minWidth: 600, aspect: 'any', maxSize: 10 * 1024 * 1024 },
   teamMember: { width: 400, height: 400, minWidth: 200, aspect: '1:1', maxSize: 5 * 1024 * 1024 },
@@ -172,7 +223,8 @@ export const IMAGE_SLOTS = {
 
 // ─── Tier Config ────────────────────────────────────────────────
 // Free tier uses lightweight models (Gemini Flash) to keep costs ~$0.01/action.
-// Pro/Business use full models for richer output.
+// Pro/Plus/Business use full models for richer output.
+// All tiers get access to ALL modules — gated by quantity limits, not access.
 export const TIER_CONFIG = {
   free: {
     label: 'Free',
@@ -180,7 +232,14 @@ export const TIER_CONFIG = {
     price: 0,
     model: 'flash',          // lightweight — keeps cost per free user < $0.05/mo
     imageGen: 'basic',       // basic Gemini / OpenAI gen (free/cheap)
-    features: ['SEO title suggestions', 'Meta description drafts', 'Basic schema hints', 'Basic image generation'],
+    features: [
+      'All modules — 3 blog, 3 products, 1 event',
+      '5 AI actions/mo (SEO titles & metas)',
+      '1 gallery album (5 photos)',
+      '3 team members, 1 announcement',
+      'Basic image generation',
+      'Admin-approved publishing',
+    ],
   },
   pro: {
     label: 'AI Pro',
@@ -189,11 +248,29 @@ export const TIER_CONFIG = {
     model: 'pro',
     imageGen: 'premium',     // basic free + premium pay-per-gen
     features: [
-      'SEO title & meta optimization',
-      'Blog post draft assistance',
-      'Product description generator',
-      'Auto JSON-LD schema',
-      'Auto llms.txt generation',
+      'Unlimited blog posts',
+      '25 products, 10 events',
+      '5 albums (30 photos), 10 team members',
+      '30 AI actions/mo',
+      'AI blog drafts & product descriptions',
+      'Auto JSON-LD schema & llms.txt',
+      'Self-publishing',
+      'Premium image generation (pay-per-gen)',
+    ],
+  },
+  plus: {
+    label: 'AI Plus',
+    aiActions: 100,
+    price: 49,
+    model: 'pro',
+    imageGen: 'premium',
+    features: [
+      'Everything in AI Pro',
+      '100 products, unlimited events & gallery',
+      'Unlimited team members & announcements',
+      '100 AI actions/mo',
+      'Full blog post generation',
+      'Social media post generator',
       'Premium image generation (pay-per-gen)',
     ],
   },
@@ -204,9 +281,9 @@ export const TIER_CONFIG = {
     model: 'pro',
     imageGen: 'premium',     // basic free + premium pay-per-gen
     features: [
-      'Everything in AI Pro',
-      'Full blog post generation',
-      'Social media post generator',
+      'Everything in AI Plus',
+      'Unlimited everything',
+      '200 AI actions/mo',
       'Competitor keyword analysis',
       'Priority support',
       'Premium image generation (pay-per-gen)',
@@ -248,4 +325,266 @@ export const AI_ACTION_PRICING = {
   llmsTxt:     { label: 'llms.txt Generation',    price: 0.99, desc: 'AI-readable site summary for LLM discoverability' },
   socialPosts: { label: 'Social Media Posts',      price: 1.99, desc: 'Platform-optimized posts from your content' },
   keywords:    { label: 'Keyword Research',        price: 2.99, desc: 'High-impact keywords for your industry and location' },
+};
+
+// ─── Block Registry ─────────────────────────────────────────────
+// Defines every block type available in the Page Composer.
+// Categories: core (always available), module (requires active module),
+// premium (tier-gated integrations that create upsell pressure).
+export const BLOCK_REGISTRY = {
+  // ── Core Blocks ── Always available on every tier ──
+  hero: {
+    id: 'hero',
+    label: 'Hero Section',
+    description: 'Bold headline, subtitle, and call-to-action buttons.',
+    icon: 'hero',
+    category: 'core',
+    linkedModule: null,
+    minTier: null,
+    fields: 'custom',
+    defaultData: {
+      eyebrow: '',
+      title: '',
+      subtitle: '',
+      ctaPrimary: 'Get Started',
+      ctaSecondary: 'Learn More',
+      ctaPrimaryUrl: '',
+      ctaSecondaryUrl: '',
+      bgImage: '',
+      overlayColor: 'rgba(15, 23, 42, 0.70)',
+      textColor: '#ffffff',
+      overlayEnabled: true,
+    },
+  },
+  about: {
+    id: 'about',
+    label: 'About Section',
+    description: 'Tell visitors who you are and what you believe.',
+    icon: 'about',
+    category: 'core',
+    linkedModule: null,
+    minTier: null,
+    fields: 'custom',
+    defaultData: { eyebrow: '', title: '', description: '', aboutImage: '' },
+  },
+  leadership: {
+    id: 'leadership',
+    label: 'Leadership / Team',
+    description: 'Showcase your leadership team with photos, bios, and roles.',
+    icon: 'leadership',
+    category: 'core',
+    linkedModule: null,
+    minTier: null,
+    fields: 'custom',
+    memberFields: [
+      { key: 'name',  label: 'Name',  type: 'text' },
+      { key: 'role',  label: 'Title / Role', type: 'text' },
+      { key: 'bio',   label: 'Bio',   type: 'textarea' },
+      { key: 'photo', label: 'Headshot', type: 'image', slot: 'teamMember' },
+    ],
+    defaultData: {
+      sectionTitle: 'Our Leadership',
+      members: [
+        { id: 'm1', name: '', role: '', bio: '', photo: '' },
+      ],
+    },
+  },
+  cta: {
+    id: 'cta',
+    label: 'Call to Action',
+    description: 'Closing banner that encourages visitors to take action.',
+    icon: 'cta',
+    category: 'core',
+    linkedModule: null,
+    minTier: null,
+    fields: [
+      { key: 'title', label: 'Headline', type: 'text' },
+      { key: 'description', label: 'Subtext', type: 'textarea' },
+    ],
+    defaultData: { title: '', description: '' },
+  },
+  textBlock: {
+    id: 'textBlock',
+    label: 'Text Block',
+    description: 'Free-form rich text section for any content.',
+    icon: 'text',
+    category: 'core',
+    linkedModule: null,
+    minTier: null,
+    fields: [
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'body', label: 'Body Content', type: 'textarea' },
+    ],
+    defaultData: { title: '', body: '' },
+  },
+  imageBanner: {
+    id: 'imageBanner',
+    label: 'Image Banner',
+    description: 'Full-width image with optional overlay text.',
+    icon: 'image',
+    category: 'core',
+    linkedModule: null,
+    minTier: null,
+    fields: 'custom',
+    defaultData: { imageUrl: '', overlayText: '', altText: '', overlayEnabled: true, overlayColor: 'rgba(15, 23, 42, 0.50)' },
+  },
+
+  // ── Module Blocks ── Requires linked module to be active ──
+  blogPreview: {
+    id: 'blogPreview',
+    label: 'Blog Preview',
+    description: 'Show your latest blog posts with thumbnails and excerpts.',
+    icon: 'blog',
+    category: 'module',
+    linkedModule: 'blog',
+    minTier: null,
+    fields: [
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'maxPosts', label: 'Posts to Show', type: 'number' },
+    ],
+    defaultData: { title: 'Latest from the Blog', maxPosts: 3 },
+  },
+  productShowcase: {
+    id: 'productShowcase',
+    label: 'Product Showcase',
+    description: 'Display featured products or services from your catalog.',
+    icon: 'product',
+    category: 'module',
+    linkedModule: 'products',
+    minTier: null,
+    fields: [
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'maxItems', label: 'Products to Show', type: 'number' },
+    ],
+    defaultData: { title: 'Featured Products', maxItems: 4 },
+  },
+  eventsFeed: {
+    id: 'eventsFeed',
+    label: 'Events Feed',
+    description: 'Upcoming events with dates, times, and locations.',
+    icon: 'calendar',
+    category: 'module',
+    linkedModule: 'events',
+    minTier: null,
+    fields: [
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'maxEvents', label: 'Events to Show', type: 'number' },
+    ],
+    defaultData: { title: 'Upcoming Events', maxEvents: 3 },
+  },
+  galleryStrip: {
+    id: 'galleryStrip',
+    label: 'Gallery Strip',
+    description: 'Photo showcase strip from your gallery albums.',
+    icon: 'gallery',
+    category: 'module',
+    linkedModule: 'gallery',
+    minTier: null,
+    fields: [
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'maxPhotos', label: 'Photos to Show', type: 'number' },
+    ],
+    defaultData: { title: 'Photo Gallery', maxPhotos: 6 },
+  },
+  teamGrid: {
+    id: 'teamGrid',
+    label: 'Team Grid',
+    description: 'Grid of team member cards with photos and titles.',
+    icon: 'team',
+    category: 'module',
+    linkedModule: 'team',
+    minTier: null,
+    fields: [
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'maxMembers', label: 'Members to Show', type: 'number' },
+    ],
+    defaultData: { title: 'Our Team', maxMembers: 6 },
+  },
+
+  // ── Premium Integration Blocks ── Tier-gated, locked for Free ──
+  youtubeChannel: {
+    id: 'youtubeChannel',
+    label: 'YouTube Feed',
+    description: 'Display video thumbnails from your YouTube channel.',
+    icon: 'youtube',
+    category: 'premium',
+    linkedModule: null,
+    minTier: 'pro',
+    fields: [
+      { key: 'channelUrl', label: 'YouTube Channel URL', type: 'text' },
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'maxVideos', label: 'Videos to Show', type: 'number' },
+    ],
+    defaultData: { channelUrl: '', title: 'Watch Our Videos', maxVideos: 4 },
+  },
+  googleReviews: {
+    id: 'googleReviews',
+    label: 'Google Reviews',
+    description: 'Showcase your Google Business reviews to build trust.',
+    icon: 'reviews',
+    category: 'premium',
+    linkedModule: null,
+    minTier: 'pro',
+    fields: [
+      { key: 'placeId', label: 'Google Place ID', type: 'text' },
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'maxReviews', label: 'Reviews to Show', type: 'number' },
+    ],
+    defaultData: { placeId: '', title: 'What People Say', maxReviews: 5 },
+  },
+  donationWidget: {
+    id: 'donationWidget',
+    label: 'Donation Widget',
+    description: 'Accept donations or offerings with preset amounts.',
+    icon: 'donation',
+    category: 'premium',
+    linkedModule: null,
+    minTier: 'plus',
+    fields: [
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'description', label: 'Description', type: 'textarea' },
+      { key: 'amounts', label: 'Preset Amounts (comma-separated)', type: 'text' },
+    ],
+    defaultData: { title: 'Give Online', description: '', amounts: '10, 25, 50, 100' },
+  },
+  socialFeed: {
+    id: 'socialFeed',
+    label: 'Social Feed',
+    description: 'Embed your latest social media posts.',
+    icon: 'social',
+    category: 'premium',
+    linkedModule: null,
+    minTier: 'plus',
+    fields: [
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'platform', label: 'Platform', type: 'text' },
+      { key: 'profileUrl', label: 'Profile URL', type: 'text' },
+    ],
+    defaultData: { title: 'Follow Us', platform: 'instagram', profileUrl: '' },
+  },
+  podcastPlayer: {
+    id: 'podcastPlayer',
+    label: 'Podcast Player',
+    description: 'Embedded podcast player with your latest episodes.',
+    icon: 'podcast',
+    category: 'premium',
+    linkedModule: null,
+    minTier: 'business',
+    fields: [
+      { key: 'title', label: 'Section Title', type: 'text' },
+      { key: 'rssFeed', label: 'Podcast RSS Feed URL', type: 'text' },
+      { key: 'maxEpisodes', label: 'Episodes to Show', type: 'number' },
+    ],
+    defaultData: { title: 'Listen to Our Podcast', rssFeed: '', maxEpisodes: 5 },
+  },
+};
+
+// ─── Block Limits Per Tier ──────────────────────────────────────
+// Controls how many blocks a client can place on a single page.
+// Free users get a taste, paid users get capacity.
+export const BLOCK_LIMITS = {
+  free: 4,
+  pro: 8,
+  plus: 15,
+  business: Infinity,
 };

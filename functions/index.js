@@ -5,6 +5,7 @@
  * createCheckoutSession: Create a Stripe Checkout session (subscriptions + one-time)
  * stripeWebhook:         Handle Stripe webhook events (payment success, subscription changes)
  * createPortalSession:   Open Stripe Customer Portal for subscription management
+ * runAiAction:           Generate AI content (SEO, blog drafts, schema, etc.) via Gemini
  */
 
 const { onDocumentWritten } = require('firebase-functions/v2/firestore');
@@ -18,8 +19,9 @@ const { defineSecret } = require('firebase-functions/params');
 initializeApp();
 const db = getFirestore();
 
-// ─── Secrets (set via: firebase functions:secrets:set STRIPE_SECRET_KEY) ─────
+// ─── Secrets (set via: firebase functions:secrets:set SECRET_NAME) ───────────
 const stripeSecretKey = defineSecret('STRIPE_SECRET_KEY');
+const geminiApiKey = defineSecret('GEMINI_API_KEY');
 const stripeWebhookSecret = defineSecret('STRIPE_WEBHOOK_SECRET');
 
 // ─── Tier → Stripe Price ID mapping ─────────────────────────────
@@ -27,6 +29,7 @@ const stripeWebhookSecret = defineSecret('STRIPE_WEBHOOK_SECRET');
 // For now, use placeholders — replace with real price IDs.
 const PLAN_PRICE_IDS = {
   pro:      process.env.STRIPE_PRICE_PRO      || 'price_1TPbZzII04nd8gjIAd96UdLH',
+  plus:     process.env.STRIPE_PRICE_PLUS     || 'price_PLUS_PLACEHOLDER',  // TODO: Create in Stripe Dashboard
   business: process.env.STRIPE_PRICE_BUSINESS  || 'price_1TPbbBII04nd8gjIgRKuj1Wn',
 };
 
@@ -34,6 +37,7 @@ const PLAN_PRICE_IDS = {
 const TIER_ACTIONS = {
   free: 5,
   pro: 30,
+  plus: 100,
   business: 200,
 };
 
@@ -163,6 +167,29 @@ exports.createCheckoutSession = onRequest(
         }
       }
 
+      // ── Credit pack purchase (e.g. 5 credits for $9.99) ───────
+      else if (sessionType === 'creditPack') {
+        const credits = parseInt(req.body.credits || '5', 10);
+        const packPrice = parseFloat(price || '9.99');
+        const unitAmount = Math.round(packPrice * 100);
+        sessionConfig = {
+          ...sessionConfig,
+          mode: 'payment',
+          line_items: [{
+            price_data: {
+              currency: 'usd',
+              product_data: {
+                name: `AI Credit Pack (${credits} Credits)`,
+                description: `${credits} AI action credits for ${siteData.name || 'your site'}`,
+              },
+              unit_amount: unitAmount,
+            },
+            quantity: 1,
+          }],
+          metadata: { ...sessionConfig.metadata, creditsToAdd: String(credits) },
+        };
+      }
+
       // ── Premium image generation purchase ──────────────────────
       else if (sessionType === 'imageGen') {
         const unitAmount = Math.round(parseFloat(price) * 100);
@@ -253,7 +280,7 @@ exports.stripeWebhook = onRequest(
             logger.info(`✅ Site ${siteId} upgraded to ${plan} (${tierActions} credits)`);
           }
 
-          else if (sessionType === 'oneTime' || sessionType === 'imageGen') {
+          else if (sessionType === 'oneTime' || sessionType === 'imageGen' || sessionType === 'creditPack') {
             // Add purchased credits (or just mark as paid for image gen)
             const credits = parseInt(creditsToAdd || '0', 10);
             if (credits > 0) {
@@ -356,6 +383,294 @@ exports.createPortalSession = onRequest(
     } catch (err) {
       logger.error('Portal session error:', err);
       return res.status(500).json({ error: err.message });
+    }
+  }
+);
+
+// ═════════════════════════════════════════════════════════════════
+// 5. RUN AI ACTION (Gemini-powered content generation)
+// ═════════════════════════════════════════════════════════════════
+
+/**
+ * Build an action-specific prompt from context.
+ * Each prompt is crafted for a specific output shape.
+ */
+function buildPrompt(actionKey, context) {
+  const { siteName, industry, title, excerpt, body, category, productName, productDescription, productPrice, url } = context || {};
+  const site = siteName || 'the website';
+  const ind = industry || 'general business';
+
+  const prompts = {
+    seo: `You are an SEO expert. Generate an optimized SEO title tag and meta description for the following content.
+
+Business: ${site} (${ind})
+Page title: ${title || 'Untitled'}
+Content excerpt: ${excerpt || body?.slice(0, 300) || 'No content provided'}
+
+Rules:
+- Title tag: 50-60 characters, include primary keyword near the front
+- Meta description: 140-155 characters, include a call to action
+- Use natural language, not keyword stuffing
+
+Respond in this exact JSON format:
+{"seoTitle": "...", "metaDescription": "..."}`,
+
+    blogDraft: `You are a professional blog writer for ${site}, a ${ind} business.
+
+Write a complete SEO-optimized blog post about: ${title || 'a topic relevant to our audience'}
+${category ? `Category: ${category}` : ''}
+${excerpt ? `Brief/direction: ${excerpt}` : ''}
+
+Rules:
+- 800-1200 words
+- Use markdown formatting (## for h2, ### for h3, **bold**, *italic*, bullet lists)
+- Include an engaging introduction and conclusion
+- Natural keyword placement throughout
+- Write in a professional but approachable tone
+- Include 3-5 subheadings
+
+Respond in this exact JSON format:
+{"title": "...", "excerpt": "A 1-2 sentence summary for post cards and SEO (under 160 chars)", "body": "...full markdown body...", "slug": "url-friendly-slug"}`,
+
+    blogFull: `You are a full-stack content strategist for ${site}, a ${ind} business.
+
+Create a complete content package for a blog post about: ${title || 'a topic relevant to our audience'}
+${category ? `Category: ${category}` : ''}
+${excerpt ? `Brief/direction: ${excerpt}` : ''}
+
+Generate ALL of the following:
+1. SEO-optimized blog post (800-1200 words, markdown formatted)
+2. SEO title tag (50-60 chars) and meta description (140-155 chars)
+3. JSON-LD BlogPosting schema
+4. An llms.txt entry summarizing this content for AI discoverability
+
+Respond in this exact JSON format:
+{
+  "title": "...",
+  "excerpt": "1-2 sentence summary under 160 chars",
+  "body": "...full markdown body...",
+  "slug": "url-friendly-slug",
+  "seoTitle": "...",
+  "metaDescription": "...",
+  "schema": "...valid JSON-LD BlogPosting schema as a string...",
+  "llmsTxt": "...3-5 line summary for llms.txt..."
+}`,
+
+    productDesc: `You are a conversion-focused copywriter for ${site}, a ${ind} business.
+
+Write a compelling product description for:
+Product: ${productName || title || 'Untitled Product'}
+${category ? `Category: ${category}` : ''}
+${productPrice ? `Price: $${productPrice}` : ''}
+${productDescription ? `Current description: ${productDescription}` : ''}
+
+Rules:
+- 150-300 words
+- Lead with the primary benefit
+- Include 3-5 key features
+- End with a subtle call to action
+- Use sensory and emotional language
+- Professional but engaging tone
+
+Respond in this exact JSON format:
+{"description": "..."}`,
+
+    schema: `You are a structured data specialist.
+
+Generate valid JSON-LD schema for the following content:
+
+Business: ${site} (${ind})
+Content type: ${context.pageType || 'WebPage'}
+Title: ${title || 'Untitled'}
+${excerpt ? `Description: ${excerpt}` : ''}
+${url ? `URL: ${url}` : ''}
+${productName ? `Product: ${productName}` : ''}
+${productPrice ? `Price: $${productPrice}` : ''}
+
+Rules:
+- Use Schema.org vocabulary
+- Include @context, @type, and all relevant properties
+- For blog posts use BlogPosting, for products use Product
+- Include breadcrumb if applicable
+- Valid JSON only
+
+Respond in this exact JSON format:
+{"jsonLd": "...valid JSON-LD as a string..."}`,
+
+    llmsTxt: `You are an AI discoverability specialist for ${site}, a ${ind} business.
+
+Generate an llms.txt file that helps AI systems understand this website.
+${title ? `Current page: ${title}` : ''}
+${excerpt ? `About: ${excerpt}` : ''}
+${body ? `Content preview: ${body.slice(0, 500)}` : ''}
+
+Rules:
+- Follow the llms.txt standard format
+- Include: site name, description, key topics, content types
+- Keep it concise (10-20 lines)
+- Focus on what makes this business unique
+- Include relevant keywords naturally
+
+Respond in this exact JSON format:
+{"llmsTxt": "...full llms.txt content..."}`,
+
+    socialPosts: `You are a social media manager for ${site}, a ${ind} business.
+
+Create platform-optimized social media posts promoting this content:
+Title: ${title || 'Untitled'}
+${excerpt ? `Summary: ${excerpt}` : ''}
+${body ? `Content preview: ${body.slice(0, 500)}` : ''}
+
+Generate posts for each platform:
+- Twitter/X: 240 chars max, punchy, include 2-3 hashtags
+- Facebook: 2-3 sentences, conversational, include CTA
+- Instagram: Caption style, 3-5 relevant hashtags at the end
+- LinkedIn: Professional tone, 2-3 sentences, thought leadership angle
+
+Respond in this exact JSON format:
+{"twitter": "...", "facebook": "...", "instagram": "...", "linkedin": "..."}`,
+
+    keywords: `You are a keyword research specialist for ${site}, a ${ind} business.
+${context.location ? `Location: ${context.location}` : ''}
+${context.services ? `Services: ${context.services}` : ''}
+
+Generate a keyword research report with:
+- 5 primary keywords (high volume, direct relevance)
+- 5 secondary keywords (medium volume, related topics)
+- 5 long-tail keywords (low competition, high intent)
+
+For each keyword include an estimated search intent (informational, commercial, transactional, navigational).
+
+Respond in this exact JSON format:
+{
+  "primary": [{"keyword": "...", "intent": "..."}],
+  "secondary": [{"keyword": "...", "intent": "..."}],
+  "longTail": [{"keyword": "...", "intent": "..."}]
+}`,
+  };
+
+  return prompts[actionKey] || null;
+}
+
+/** How many credits each action costs */
+const ACTION_CREDIT_COST = {
+  seo: 1,
+  blogDraft: 1,
+  blogFull: 3,
+  productDesc: 1,
+  schema: 1,
+  llmsTxt: 1,
+  socialPosts: 1,
+  keywords: 1,
+};
+
+exports.runAiAction = onRequest(
+  { cors: true, secrets: [geminiApiKey] },
+  async (req, res) => {
+    if (req.method !== 'POST') {
+      return res.status(405).json({ error: 'Method not allowed' });
+    }
+
+    const { actionKey, context, siteId, uid } = req.body;
+
+    // ── Validate inputs ──────────────────────────────────────────
+    if (!actionKey || !siteId || !uid) {
+      return res.status(400).json({ error: 'Missing actionKey, siteId, or uid' });
+    }
+
+    const prompt = buildPrompt(actionKey, context || {});
+    if (!prompt) {
+      return res.status(400).json({ error: `Unknown action: ${actionKey}` });
+    }
+
+    const creditCost = ACTION_CREDIT_COST[actionKey] || 1;
+
+    try {
+      // ── Verify site access & check credits ─────────────────────
+      const siteRef = db.doc(`sites/${siteId}`);
+      const siteSnap = await siteRef.get();
+
+      if (!siteSnap.exists) {
+        return res.status(404).json({ error: 'Site not found' });
+      }
+
+      const siteData = siteSnap.data();
+      const tier = siteData.tier || 'free';
+      const remaining = siteData.aiActionsRemaining ?? 0;
+
+      if (remaining < creditCost) {
+        return res.status(402).json({
+          error: `Not enough credits. You have ${remaining}, but ${actionKey} costs ${creditCost}.`,
+          remaining,
+          cost: creditCost,
+        });
+      }
+
+      // ── Select model based on tier ─────────────────────────────
+      const modelName = tier === 'free' ? 'gemini-2.0-flash' : 'gemini-2.0-flash';
+      // Note: both use flash for now (fast + cheap). Upgrade paid tiers to
+      // gemini-2.0-pro when cost margins justify it.
+
+      // ── Call Gemini ────────────────────────────────────────────
+      const { GoogleGenAI } = require('@google/genai');
+      const ai = new GoogleGenAI({ apiKey: geminiApiKey.value() });
+
+      logger.info(`Running AI action: ${actionKey} for site ${siteId} (model: ${modelName})`);
+
+      const response = await ai.models.generateContent({
+        model: modelName,
+        contents: prompt,
+        config: {
+          responseMimeType: 'application/json',
+          temperature: 0.7,
+        },
+      });
+
+      // ── Parse the response ─────────────────────────────────────
+      let result;
+      try {
+        const text = response.text || '';
+        result = JSON.parse(text);
+      } catch (parseErr) {
+        logger.error('Failed to parse Gemini response:', parseErr.message);
+        // Try to extract JSON from the response text
+        const text = response.text || '';
+        const jsonMatch = text.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+          result = JSON.parse(jsonMatch[0]);
+        } else {
+          return res.status(500).json({ error: 'AI returned invalid format. Please try again.' });
+        }
+      }
+
+      // ── Deduct credits ─────────────────────────────────────────
+      await siteRef.update({
+        aiActionsRemaining: FieldValue.increment(-creditCost),
+      });
+
+      // ── Log usage ──────────────────────────────────────────────
+      const usageRef = db.collection(`sites/${siteId}/aiUsage`).doc();
+      await usageRef.set({
+        actionKey,
+        creditCost,
+        model: modelName,
+        uid,
+        createdAt: new Date().toISOString(),
+      });
+
+      logger.info(`✅ AI action ${actionKey} completed for site ${siteId} (${creditCost} credits deducted)`);
+
+      return res.json({
+        success: true,
+        actionKey,
+        result,
+        creditsUsed: creditCost,
+        creditsRemaining: remaining - creditCost,
+      });
+
+    } catch (err) {
+      logger.error('AI action error:', err);
+      return res.status(500).json({ error: err.message || 'AI generation failed. Please try again.' });
     }
   }
 );

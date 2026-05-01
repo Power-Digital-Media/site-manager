@@ -7,6 +7,7 @@
  */
 
 import './style.css';
+import './vb-styles.css';
 import { Store } from './store.js';
 import { onAuthChange, signOut, isAdmin, getUserSiteId, getDisplayName, getCurrentUser } from './auth.js';
 import { renderSidebar } from './components/sidebar.js';
