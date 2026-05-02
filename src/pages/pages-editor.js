@@ -21,6 +21,14 @@ const ICONS = {
   save: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>',
   plus: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="64" height="64"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>',
   chevron: '<svg class="block-library__chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>',
+  // Preview mode icons
+  desktop: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+  tablet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16"><rect x="4" y="2" width="16" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>',
+  mobile: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" width="16"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>',
+  fullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+  exitFullscreen: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"><polyline points="4 14 10 14 10 20"/><polyline points="20 10 14 10 14 4"/><line x1="14" y1="10" x2="21" y2="3"/><line x1="3" y1="21" x2="10" y2="14"/></svg>',
+  eye: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>',
+  editMode: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="16"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z"/></svg>',
 };
 
 const BLOCK_TYPE_ICONS = {
@@ -31,6 +39,34 @@ const BLOCK_TYPE_ICONS = {
 
 let _editingBlockId = null;
 let _dragBlockId = null;
+let _previewMode = 'desktop';   // 'desktop' | 'tablet' | 'mobile'
+let _isPreviewActive = false;    // true when in preview (no edit chrome)
+let _isFullscreen = false;       // true when fullscreen overlay is open
+let _savedScrollPos = 0;         // restore canvas scroll when leaving preview
+let _pendingEditData = null;     // { blockId, blockType, data } — unsaved local edits
+
+/**
+ * Store the latest local edit data so it can be flushed before preview/fullscreen.
+ * Called from each custom edit panel's init function whenever data changes.
+ */
+function _registerPendingEdit(blockId, blockType, data) {
+  _pendingEditData = { blockId, blockType, data };
+}
+
+/**
+ * Flush any pending (unsaved) edits to the Store.
+ * Called before any transition that triggers refresh() (preview/fullscreen).
+ */
+async function _flushPendingEdits() {
+  if (!_pendingEditData) return;
+  const { blockId, data } = _pendingEditData;
+  try {
+    await Store.updatePageBlock(blockId, data);
+  } catch (e) {
+    console.warn('Auto-save flush failed:', e);
+  }
+  _pendingEditData = null;
+}
 
 function esc(text) {
   if (typeof text !== 'string') return '';
@@ -46,16 +82,30 @@ export function renderPagesEditor() {
   const capacity = Store.canAddPageBlock();
   const tier = Store.getTier();
 
+  const composerCls = [
+    'vb-composer',
+    _isPreviewActive ? 'vb-composer--preview' : '',
+    _isFullscreen ? 'vb-composer--fullscreen' : '',
+  ].filter(Boolean).join(' ');
+
+  const canvasCls = [
+    'vb-canvas',
+    _isPreviewActive ? `vb-canvas--preview vb-canvas--${_previewMode}` : '',
+  ].filter(Boolean).join(' ');
+
   return `
-    <div class="vb-composer">
+    <div class="${composerCls}">
       <div class="vb-composer__header">
         <div>
           <h2>Page Composer</h2>
           <p class="text-muted">Build your page visually — drag blocks, click to edit.</p>
         </div>
-        <div class="vb-composer__meta">
-          <span class="vb-composer__count ${!capacity.allowed ? 'vb-composer__count--full' : ''}">${capacity.current}/${capacity.limit === Infinity ? '∞' : capacity.limit} blocks</span>
-          <span class="tier-badge tier-badge--${tier}">${TIER_CONFIG[tier]?.label || 'Free'}</span>
+        <div class="vb-composer__header-right">
+          ${renderPreviewToolbar()}
+          <div class="vb-composer__meta">
+            <span class="vb-composer__count ${!capacity.allowed ? 'vb-composer__count--full' : ''}">${capacity.current}/${capacity.limit === Infinity ? '∞' : capacity.limit} blocks</span>
+            <span class="tier-badge tier-badge--${tier}">${TIER_CONFIG[tier]?.label || 'Free'}</span>
+          </div>
         </div>
       </div>
       <div class="vb-composer__body">
@@ -63,8 +113,8 @@ export function renderPagesEditor() {
           <div id="vb-sidebar-library">${renderLibrary()}</div>
           <div id="vb-sidebar-editor" class="vb-edit-panel" style="display:none"></div>
         </aside>
-        <main class="vb-canvas" id="vb-canvas">
-          ${blocks.length === 0 ? renderEmpty() : renderCanvas(blocks)}
+        <main class="${canvasCls}" id="vb-canvas">
+          ${_isPreviewActive ? renderPreviewCanvas(blocks) : (blocks.length === 0 ? renderEmpty() : renderCanvas(blocks))}
         </main>
       </div>
     </div>`;
@@ -162,6 +212,114 @@ function renderEmpty() {
     </div>`;
 }
 
+// ── Preview Toolbar ─────────────────────────────────────────────
+
+function renderPreviewToolbar() {
+  const devices = [
+    { key: 'desktop', icon: ICONS.desktop, label: 'Desktop' },
+    { key: 'tablet',  icon: ICONS.tablet,  label: 'Tablet' },
+    { key: 'mobile',  icon: ICONS.mobile,  label: 'Mobile' },
+  ];
+
+  const deviceBtns = devices.map(d => `
+    <button class="pvt__device-btn ${_previewMode === d.key ? 'pvt__device-btn--active' : ''}" 
+            data-preview-device="${d.key}" title="${d.label} view">
+      ${d.icon}
+    </button>
+  `).join('');
+
+  return `
+    <div class="pvt" id="preview-toolbar">
+      <div class="pvt__devices">
+        ${deviceBtns}
+      </div>
+      <div class="pvt__divider"></div>
+      <button class="pvt__action-btn ${_isPreviewActive ? 'pvt__action-btn--active' : ''}" 
+              id="pvt-preview-toggle" title="${_isPreviewActive ? 'Back to Edit' : 'Preview Mode'}">
+        ${_isPreviewActive ? ICONS.editMode : ICONS.eye}
+        <span>${_isPreviewActive ? 'Edit' : 'Preview'}</span>
+      </button>
+      <button class="pvt__action-btn ${_isFullscreen ? 'pvt__action-btn--active' : ''}" 
+              id="pvt-fullscreen-toggle" title="${_isFullscreen ? 'Exit Fullscreen' : 'Fullscreen'}">
+        ${_isFullscreen ? ICONS.exitFullscreen : ICONS.fullscreen}
+        <span>${_isFullscreen ? 'Exit' : 'Expand'}</span>
+      </button>
+    </div>`;
+}
+
+// ── Preview Canvas (read-only, no edit chrome) ──────────────────
+
+function renderPreviewCanvas(blocks) {
+  if (blocks.length === 0) {
+    return `
+      <div class="vb-preview-empty">
+        <p>No blocks to preview. Add some blocks first!</p>
+      </div>`;
+  }
+  let html = '<div class="vb-preview-frame">';
+  blocks.forEach(block => {
+    html += `
+      <div class="vb-preview-block" data-block-type="${block.type}">
+        ${renderBlockPreview(block.type, block.data)}
+      </div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+// ── Preview State Handlers ──────────────────────────────────────
+
+function setPreviewDevice(device) {
+  _previewMode = device;
+  // Update canvas class without full re-render
+  const canvas = document.getElementById('vb-canvas');
+  if (canvas) {
+    canvas.classList.remove('vb-canvas--desktop', 'vb-canvas--tablet', 'vb-canvas--mobile');
+    if (_isPreviewActive) {
+      canvas.classList.add(`vb-canvas--${device}`);
+    }
+  }
+  // Update active state on device buttons
+  document.querySelectorAll('[data-preview-device]').forEach(btn => {
+    btn.classList.toggle('pvt__device-btn--active', btn.dataset.previewDevice === device);
+  });
+}
+
+function togglePreviewMode() {
+  // Auto-save any pending edits before switching modes
+  _flushPendingEdits();
+  _isPreviewActive = !_isPreviewActive;
+  if (_isPreviewActive) {
+    // Save scroll position
+    const canvas = document.getElementById('vb-canvas');
+    if (canvas) _savedScrollPos = canvas.scrollTop;
+    // Close any open edit panel
+    closeEditPanel();
+  }
+  refresh();
+  // Restore scroll
+  if (!_isPreviewActive) {
+    requestAnimationFrame(() => {
+      const canvas = document.getElementById('vb-canvas');
+      if (canvas) canvas.scrollTop = _savedScrollPos;
+    });
+  }
+}
+
+function toggleFullscreen() {
+  // Auto-save any pending edits before switching modes
+  _flushPendingEdits();
+  _isFullscreen = !_isFullscreen;
+  // If entering fullscreen, also activate preview mode
+  if (_isFullscreen && !_isPreviewActive) {
+    _isPreviewActive = true;
+    const canvas = document.getElementById('vb-canvas');
+    if (canvas) _savedScrollPos = canvas.scrollTop;
+    closeEditPanel();
+  }
+  refresh();
+}
+
 // ── Edit Panel ──────────────────────────────────────────────────
 
 function renderEditPanel(blockId) {
@@ -176,6 +334,12 @@ function renderEditPanel(blockId) {
   }
   if (def.fields === 'custom' && block.type === 'hero') {
     return renderHeroEditPanel(block, def);
+  }
+  if (def.fields === 'custom' && block.type === 'imageBanner') {
+    return renderImageBannerEditPanel(block, def);
+  }
+  if (def.fields === 'custom' && block.type === 'about') {
+    return renderAboutEditPanel(block, def);
   }
 
   if (!def.fields || def.fields === 'custom') return '<p class="text-muted" style="padding:20px">No editable fields.</p>';
@@ -376,6 +540,7 @@ function initLeadershipEditPanel(blockId) {
 
   function livePreview() {
     const sectionTitle = document.getElementById('le-section-title')?.value || 'Our Leadership';
+    _registerPendingEdit(blockId, 'leadership', { sectionTitle, members });
     updatePreviewFromData(blockId, { sectionTitle, members });
   }
 
@@ -434,6 +599,45 @@ function renderImageBannerEditPanel(block, def) {
           label: 'Banner Background',
           compact: false,
         })}
+      </div>
+
+      <!-- Image Position Controls -->
+      <div class="he-section" id="ib-position-section" ${!hasImage ? 'style="display:none"' : ''}>
+        <h4 class="he-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14"><path d="M5 9l-3 3 3 3"/><path d="M9 5l3-3 3 3"/><path d="M15 19l-3 3-3-3"/><path d="M19 9l3 3-3 3"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+          Image Position
+        </h4>
+        <p class="form-help" style="margin-bottom:10px;">Pan and zoom to frame the part of your image you want visible.</p>
+        <div class="he-pos-grid">
+          <div class="he-pos-slider">
+            <label class="form-label form-label--sm">Horizontal (X)</label>
+            <div class="he-slider-wrap">
+              <span class="he-slider-label-left">← Left</span>
+              <input type="range" class="he-slider" id="ib-bg-pos-x" min="0" max="100" value="${data.bgPositionX !== undefined ? data.bgPositionX : 50}" />
+              <span class="he-slider-label-right">Right →</span>
+            </div>
+            <span class="he-slider-val he-slider-val--center" id="ib-bg-pos-x-val">${data.bgPositionX !== undefined ? data.bgPositionX : 50}%</span>
+          </div>
+          <div class="he-pos-slider">
+            <label class="form-label form-label--sm">Vertical (Y)</label>
+            <div class="he-slider-wrap">
+              <span class="he-slider-label-left">↑ Top</span>
+              <input type="range" class="he-slider" id="ib-bg-pos-y" min="0" max="100" value="${data.bgPositionY !== undefined ? data.bgPositionY : 50}" />
+              <span class="he-slider-label-right">Bottom ↓</span>
+            </div>
+            <span class="he-slider-val he-slider-val--center" id="ib-bg-pos-y-val">${data.bgPositionY !== undefined ? data.bgPositionY : 50}%</span>
+          </div>
+          <div class="he-pos-slider">
+            <label class="form-label form-label--sm">Zoom (Z)</label>
+            <div class="he-slider-wrap">
+              <span class="he-slider-label-left">Fit</span>
+              <input type="range" class="he-slider" id="ib-bg-zoom" min="100" max="300" value="${data.bgZoom !== undefined ? data.bgZoom : 100}" />
+              <span class="he-slider-label-right">Close</span>
+            </div>
+            <span class="he-slider-val he-slider-val--center" id="ib-bg-zoom-val">${data.bgZoom !== undefined ? data.bgZoom : 100}%</span>
+          </div>
+          <button type="button" class="btn btn--ghost btn--xs" id="ib-pos-reset" title="Reset to center">↻ Reset Position</button>
+        </div>
       </div>
 
       <!-- Overlay & Colors -->
@@ -507,6 +711,9 @@ function initImageBannerEditPanel(blockId) {
     onComplete: async (result) => {
       bannerData.imageUrl = result.previewUrl;
       livePreview();
+      // Show position controls now that we have an image
+      const posSection = document.getElementById('ib-position-section');
+      if (posSection) posSection.style.display = '';
 
       try {
         const file = new File(
@@ -524,12 +731,47 @@ function initImageBannerEditPanel(blockId) {
         bannerData.imageUrl = '';
         livePreview();
         setWidgetImage('bannerImage', '');
+        // Hide position controls on failure
+        const posSection2 = document.getElementById('ib-position-section');
+        if (posSection2) posSection2.style.display = 'none';
       }
     },
     onRemove: () => {
       bannerData.imageUrl = '';
       livePreview();
+      // Hide position controls when image is removed
+      const posSection = document.getElementById('ib-position-section');
+      if (posSection) posSection.style.display = 'none';
     },
+  });
+
+  // ── Image position controls ────────────────────────────────
+  const posXSlider = document.getElementById('ib-bg-pos-x');
+  const posYSlider = document.getElementById('ib-bg-pos-y');
+  const zoomSlider = document.getElementById('ib-bg-zoom');
+  const posXVal = document.getElementById('ib-bg-pos-x-val');
+  const posYVal = document.getElementById('ib-bg-pos-y-val');
+  const zoomVal = document.getElementById('ib-bg-zoom-val');
+
+  function updateImagePosition() {
+    bannerData.bgPositionX = parseInt(posXSlider?.value || 50, 10);
+    bannerData.bgPositionY = parseInt(posYSlider?.value || 50, 10);
+    bannerData.bgZoom = parseInt(zoomSlider?.value || 100, 10);
+    if (posXVal) posXVal.textContent = `${bannerData.bgPositionX}%`;
+    if (posYVal) posYVal.textContent = `${bannerData.bgPositionY}%`;
+    if (zoomVal) zoomVal.textContent = `${bannerData.bgZoom}%`;
+    debouncedPreview();
+  }
+
+  posXSlider?.addEventListener('input', updateImagePosition);
+  posYSlider?.addEventListener('input', updateImagePosition);
+  zoomSlider?.addEventListener('input', updateImagePosition);
+
+  document.getElementById('ib-pos-reset')?.addEventListener('click', () => {
+    if (posXSlider) posXSlider.value = 50;
+    if (posYSlider) posYSlider.value = 50;
+    if (zoomSlider) zoomSlider.value = 100;
+    updateImagePosition();
   });
 
   // ── Overlay controls ──────────────────────────────────────
@@ -594,6 +836,7 @@ function initImageBannerEditPanel(blockId) {
   }
 
   function livePreview() {
+    _registerPendingEdit(blockId, 'imageBanner', bannerData);
     updatePreviewFromData(blockId, bannerData);
   }
 
@@ -734,6 +977,7 @@ function initAboutEditPanel(blockId) {
   }
 
   function livePreview() {
+    _registerPendingEdit(blockId, 'about', aboutData);
     updatePreviewFromData(blockId, aboutData);
   }
 
@@ -779,6 +1023,45 @@ function renderHeroEditPanel(block, def) {
           label: 'Hero Background',
           compact: false,
         })}
+      </div>
+
+      <!-- Image Position Controls -->
+      <div class="he-section" id="he-position-section" ${!hasBg ? 'style="display:none"' : ''}>
+        <h4 class="he-section__title">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="14"><path d="M5 9l-3 3 3 3"/><path d="M9 5l3-3 3 3"/><path d="M15 19l-3 3-3-3"/><path d="M19 9l3 3-3 3"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/></svg>
+          Image Position
+        </h4>
+        <p class="form-help" style="margin-bottom:10px;">Pan and zoom to frame the part of your image you want visible.</p>
+        <div class="he-pos-grid">
+          <div class="he-pos-slider">
+            <label class="form-label form-label--sm">Horizontal (X)</label>
+            <div class="he-slider-wrap">
+              <span class="he-slider-label-left">← Left</span>
+              <input type="range" class="he-slider" id="he-bg-pos-x" min="0" max="100" value="${data.bgPositionX !== undefined ? data.bgPositionX : 50}" />
+              <span class="he-slider-label-right">Right →</span>
+            </div>
+            <span class="he-slider-val he-slider-val--center" id="he-bg-pos-x-val">${data.bgPositionX !== undefined ? data.bgPositionX : 50}%</span>
+          </div>
+          <div class="he-pos-slider">
+            <label class="form-label form-label--sm">Vertical (Y)</label>
+            <div class="he-slider-wrap">
+              <span class="he-slider-label-left">↑ Top</span>
+              <input type="range" class="he-slider" id="he-bg-pos-y" min="0" max="100" value="${data.bgPositionY !== undefined ? data.bgPositionY : 50}" />
+              <span class="he-slider-label-right">Bottom ↓</span>
+            </div>
+            <span class="he-slider-val he-slider-val--center" id="he-bg-pos-y-val">${data.bgPositionY !== undefined ? data.bgPositionY : 50}%</span>
+          </div>
+          <div class="he-pos-slider">
+            <label class="form-label form-label--sm">Zoom (Z)</label>
+            <div class="he-slider-wrap">
+              <span class="he-slider-label-left">Fit</span>
+              <input type="range" class="he-slider" id="he-bg-zoom" min="100" max="300" value="${data.bgZoom !== undefined ? data.bgZoom : 100}" />
+              <span class="he-slider-label-right">Close</span>
+            </div>
+            <span class="he-slider-val he-slider-val--center" id="he-bg-zoom-val">${data.bgZoom !== undefined ? data.bgZoom : 100}%</span>
+          </div>
+          <button type="button" class="btn btn--ghost btn--xs" id="he-pos-reset" title="Reset to center">↻ Reset Position</button>
+        </div>
       </div>
 
       <!-- Overlay & Text Colors -->
@@ -903,6 +1186,9 @@ function initHeroEditPanel(blockId) {
       // Use the local preview URL immediately for live editing
       heroData.bgImage = result.previewUrl;
       livePreview();
+      // Show position controls now that we have an image
+      const posSection = document.getElementById('he-position-section');
+      if (posSection) posSection.style.display = '';
 
       try {
         // Convert the processed blob into a File for StorageService.upload()
@@ -922,12 +1208,47 @@ function initHeroEditPanel(blockId) {
         heroData.bgImage = '';
         livePreview();
         setWidgetImage('heroBgImage', '');
+        // Hide position controls on failure
+        const posSection2 = document.getElementById('he-position-section');
+        if (posSection2) posSection2.style.display = 'none';
       }
     },
     onRemove: () => {
       heroData.bgImage = '';
       livePreview();
+      // Hide position controls when image is removed
+      const posSection = document.getElementById('he-position-section');
+      if (posSection) posSection.style.display = 'none';
     },
+  });
+
+  // ── Image position controls ────────────────────────────────
+  const posXSlider = document.getElementById('he-bg-pos-x');
+  const posYSlider = document.getElementById('he-bg-pos-y');
+  const zoomSlider = document.getElementById('he-bg-zoom');
+  const posXVal = document.getElementById('he-bg-pos-x-val');
+  const posYVal = document.getElementById('he-bg-pos-y-val');
+  const zoomVal = document.getElementById('he-bg-zoom-val');
+
+  function updateImagePosition() {
+    heroData.bgPositionX = parseInt(posXSlider?.value || 50, 10);
+    heroData.bgPositionY = parseInt(posYSlider?.value || 50, 10);
+    heroData.bgZoom = parseInt(zoomSlider?.value || 100, 10);
+    if (posXVal) posXVal.textContent = `${heroData.bgPositionX}%`;
+    if (posYVal) posYVal.textContent = `${heroData.bgPositionY}%`;
+    if (zoomVal) zoomVal.textContent = `${heroData.bgZoom}%`;
+    debouncedPreview();
+  }
+
+  posXSlider?.addEventListener('input', updateImagePosition);
+  posYSlider?.addEventListener('input', updateImagePosition);
+  zoomSlider?.addEventListener('input', updateImagePosition);
+
+  document.getElementById('he-pos-reset')?.addEventListener('click', () => {
+    if (posXSlider) posXSlider.value = 50;
+    if (posYSlider) posYSlider.value = 50;
+    if (zoomSlider) zoomSlider.value = 100;
+    updateImagePosition();
   });
 
   // ── Color pickers live sync ────────────────────────────────
@@ -1028,6 +1349,7 @@ function initHeroEditPanel(blockId) {
   }
 
   function livePreview() {
+    _registerPendingEdit(blockId, 'hero', heroData);
     updatePreviewFromData(blockId, heroData);
   }
 
@@ -1066,6 +1388,24 @@ function hexAlphaToRgba(hex, alpha) {
 // ── Event Binding ───────────────────────────────────────────────
 
 export function initPagesEditor() {
+  // ── Preview Toolbar Events ──────────────────────────────────
+  document.querySelectorAll('[data-preview-device]').forEach(btn => {
+    btn.addEventListener('click', () => setPreviewDevice(btn.dataset.previewDevice));
+  });
+  document.getElementById('pvt-preview-toggle')?.addEventListener('click', togglePreviewMode);
+  document.getElementById('pvt-fullscreen-toggle')?.addEventListener('click', toggleFullscreen);
+
+  // ESC key to exit fullscreen or preview
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') {
+      if (_isFullscreen) { toggleFullscreen(); e.preventDefault(); }
+      else if (_isPreviewActive) { togglePreviewMode(); e.preventDefault(); }
+    }
+  });
+
+  // If in preview mode, skip edit-mode event binding
+  if (_isPreviewActive) return;
+
   // Library toggles
   document.querySelectorAll('[data-lib-toggle]').forEach(h => {
     h.addEventListener('click', () => h.closest('.vb-library__cat').classList.toggle('vb-library__cat--open'));
@@ -1147,6 +1487,14 @@ function openEditPanel(blockId) {
   if (block && block.type === 'hero') {
     initHeroEditPanel(blockId);
     return; // Custom panel handles its own events
+  }
+  if (block && block.type === 'imageBanner') {
+    initImageBannerEditPanel(blockId);
+    return;
+  }
+  if (block && block.type === 'about') {
+    initAboutEditPanel(blockId);
+    return;
   }
 
   // ── Generic field-based panel ────────────────────────────

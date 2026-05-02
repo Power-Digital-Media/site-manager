@@ -19,8 +19,12 @@ function heroPreview(data) {
   const textColor = data.textColor || '#ffffff';
   const overlayEnabled = data.overlayEnabled !== false;
 
+  const posX = data.bgPositionX !== undefined ? data.bgPositionX : 50;
+  const posY = data.bgPositionY !== undefined ? data.bgPositionY : 50;
+  const zoom = data.bgZoom !== undefined ? data.bgZoom : 100;
+
   const bgStyle = hasBg
-    ? `background-image:url(${esc(data.bgImage)});background-size:cover;background-position:center;`
+    ? `background-image:url(${esc(data.bgImage)});background-size:${zoom}%;background-position:${posX}% ${posY}%;`
     : '';
   const overlayStyle = hasBg && overlayEnabled
     ? `background:${overlayColor};`
@@ -161,8 +165,12 @@ function imageBannerPreview(data) {
   const overlayColor = data.overlayColor || 'rgba(15, 23, 42, 0.50)';
   const overlayEnabled = data.overlayEnabled !== false;
 
+  const posX = data.bgPositionX !== undefined ? data.bgPositionX : 50;
+  const posY = data.bgPositionY !== undefined ? data.bgPositionY : 50;
+  const zoom = data.bgZoom !== undefined ? data.bgZoom : 100;
+
   return `
-    <div class="bp bp--image-banner ${hasImage ? 'bp--banner-has-bg' : ''}" ${hasImage ? `style="background-image:url(${esc(data.imageUrl)})"` : ''}>
+    <div class="bp bp--image-banner ${hasImage ? 'bp--banner-has-bg' : ''}" ${hasImage ? `style="background-image:url(${esc(data.imageUrl)});background-size:${zoom}%;background-position:${posX}% ${posY}%;"` : ''}>
       ${hasImage && overlayEnabled ? `<div class="bp__banner-overlay-layer" style="background:${overlayColor};"></div>` : ''}
       <div class="bp__banner-overlay">
         ${data.overlayText ? `<h2 class="bp__banner-text">${esc(data.overlayText)}</h2>` : '<span class="bp__placeholder">Full-Width Image Banner</span>'}
