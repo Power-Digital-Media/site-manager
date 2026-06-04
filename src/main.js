@@ -28,6 +28,7 @@ import { renderAdmin, initAdmin, resetAdminView } from './pages/admin.js';
 import { renderModuleActivationPage, initModuleActivation } from './components/module-activation-card.js';
 import { showToast } from './components/toast.js';
 import { handleStripeRedirect } from './stripe.js';
+import { renderMenuManager, initMenuManager, resetMenuManager } from './pages/menu-manager.js';
 
 // ─── App State ──────────────────────────────────────────────────
 let isAuthenticated = false;
@@ -47,6 +48,7 @@ const PAGE_TITLES = {
   'ai-tools': 'AI Tools',
   settings: 'Settings',
   admin: 'Admin CRM',
+  menu: '🌶️ Menu Manager',
 };
 
 function getCurrentPage() {
@@ -125,6 +127,7 @@ function getPageContent(page) {
     case 'ai-tools': return renderAiTools();
     case 'settings': return renderSettings();
     case 'admin': return renderAdmin();
+    case 'menu': return renderMenuManager();
     default: return renderDashboard();
   }
 }
@@ -162,6 +165,7 @@ function initPageInteractions(page) {
     case 'ai-tools': initAiTools(rerender); break;
     case 'settings': initSettings(rerender); break;
     case 'admin': initAdmin(rerender); break;
+    case 'menu': initMenuManager(rerender); break;
   }
 }
 

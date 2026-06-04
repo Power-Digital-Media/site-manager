@@ -91,6 +91,12 @@ service cloud.firestore {
         allow write: if isAdmin();
       }
 
+      // Menu configuration (public read — powers the live website)
+      match /menuConfig/{docId} {
+        allow read: if true;
+        allow write: if hasAccessToSite(siteId);
+      }
+
       // Catch-all for future collections under a site
       match /{collection}/{docId} {
         allow read: if hasAccessToSite(siteId);

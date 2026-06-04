@@ -30,6 +30,9 @@ export function renderDashboard() {
   const recentPosts = hasBlog ? Store.getBlogPosts('published').slice(0, 3) : [];
   const announcements = hasAnnouncements ? Store.getAnnouncements().filter(a => a.active).slice(0, 2) : [];
 
+  const RESTAURANT_SITE_IDS = ['site_mpyxdvbu_de40y'];
+  const isRestaurant = site.industry === 'restaurant' || RESTAURANT_SITE_IDS.includes(site.id);
+
   return `
     <div class="dashboard">
       <div class="dashboard__welcome">
@@ -52,6 +55,44 @@ export function renderDashboard() {
           ` : ''}
         </div>
       </div>
+
+      ${isRestaurant ? `
+        <!-- Live Menu Hero Card for Restaurant Sites -->
+        <div class="dashboard__menu-hero">
+          <div class="dashboard__menu-hero-left">
+            <span class="dashboard__menu-hero-icon">🌶️</span>
+            <div>
+              <h3 class="dashboard__menu-hero-title">Live Menu — Connected</h3>
+              <p class="dashboard__menu-hero-sub">Your menu is synced to <strong>${site.domain || 'your website'}</strong> via Firestore. Price changes go live instantly.</p>
+            </div>
+          </div>
+          <div class="dashboard__menu-hero-actions">
+            <a href="#/menu" class="btn btn--primary btn--sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              Edit Menu Prices
+            </a>
+            <a href="https://${site.domain || 'tbeauxs.com'}/#/menu" target="_blank" class="btn btn--ghost btn--sm">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="14"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+              View Live Menu
+            </a>
+          </div>
+        </div>
+        <style>
+          .dashboard__menu-hero {
+            display: flex; align-items: center; justify-content: space-between; gap: 1.5rem;
+            padding: 1.25rem 1.5rem;
+            background: linear-gradient(135deg, rgba(212,175,55,0.08) 0%, rgba(220,38,38,0.06) 100%);
+            border: 1px solid rgba(212,175,55,0.25);
+            border-radius: 12px;
+            flex-wrap: wrap;
+          }
+          .dashboard__menu-hero-left { display: flex; align-items: center; gap: 1rem; }
+          .dashboard__menu-hero-icon { font-size: 2rem; }
+          .dashboard__menu-hero-title { font-size: 1rem; font-weight: 700; color: #d4af37; margin: 0 0 0.25rem; }
+          .dashboard__menu-hero-sub { font-size: 0.85rem; color: var(--text-muted); margin: 0; }
+          .dashboard__menu-hero-actions { display: flex; gap: 0.75rem; flex-wrap: wrap; }
+        </style>
+      ` : ''}
 
       <!-- Dynamic Stats — only show active module stats -->
       <div class="dashboard__stats">
